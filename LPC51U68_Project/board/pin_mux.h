@@ -37,6 +37,12 @@ void BOARD_InitBootPins(void);
 #define PIO117_FUNC_ALT4                                                   0x04u   /*!<@brief Selects pin function.: Alternative connection 4. */
 #define PIO13_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO13_FUNC_ALT0                                                    0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO16_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO16_FUNC_ALT2                                                    0x02u   /*!<@brief Selects pin function.: Alternative connection 2. */
+#define PIO17_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO17_FUNC_ALT2                                                    0x02u   /*!<@brief Selects pin function.: Alternative connection 2. */
+#define PIO18_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO18_FUNC_ALT2                                                    0x02u   /*!<@brief Selects pin function.: Alternative connection 2. */
 
 /*! @name PIO1_3 (number 17), CODEC_RESET */
 #define BOARD_INITPINS_CODEC_RESET_GPIO                                     GPIO   /*!<@brief GPIO device name: GPIO */

@@ -41,6 +41,9 @@ BOARD_InitPins:
   - {pin_num: '40', peripheral: FLEXCOMM6, signal: TXD_SCL_MISO_WS, pin_signal: PIO0_6/FC6_TXD_SCL_MISO_WS/CTIMER0_MAT1/UTICK_CAP0}
   - {pin_num: '17', peripheral: GPIO, signal: 'PIO1, 3', pin_signal: PIO1_3/FC7_SSEL2/SCT0_OUT6/FC3_SCK/CTIMER0_CAP1/USB0_UP_LED/ADC0_6, direction: OUTPUT}
   - {pin_num: '10', peripheral: SYSCON, signal: MCLK, pin_signal: PIO1_17/MCLK/UTICK_CAP3, direction: OUTPUT}
+  - {pin_num: '27', peripheral: FLEXCOMM7, signal: RXD_SDA_MOSI_DATA, pin_signal: PIO1_7/FC7_RXD_SDA_MOSI_DATA/CTIMER1_MAT2/CTIMER1_CAP2/ADC0_10}
+  - {pin_num: '26', peripheral: FLEXCOMM7, signal: SCK, pin_signal: PIO1_6/FC7_SCK/CTIMER1_CAP2/CTIMER1_MAT2/USB0_VBUS/ADC0_9}
+  - {pin_num: '28', peripheral: FLEXCOMM7, signal: TXD_SCL_MISO_WS, pin_signal: PIO1_8/FC7_TXD_SCL_MISO_WS/CTIMER1_MAT3/CTIMER1_CAP3/ADC0_11}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 
@@ -84,6 +87,21 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
       | IOCON_PIO_FUNC(PIO13_FUNC_ALT0)                      /* Selects pin function.: PORT13 (pin 17) is configured as PIO1_3 */
       | IOCON_PIO_DIGIMODE(PIO13_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[1][6] = ((IOCON->PIO[1][6] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO16_FUNC_ALT2)                      /* Selects pin function.: PORT16 (pin 26) is configured as FC7_SCK */
+      | IOCON_PIO_DIGIMODE(PIO16_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[1][7] = ((IOCON->PIO[1][7] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO17_FUNC_ALT2)                      /* Selects pin function.: PORT17 (pin 27) is configured as FC7_RXD_SDA_MOSI_DATA */
+      | IOCON_PIO_DIGIMODE(PIO17_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[1][8] = ((IOCON->PIO[1][8] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO18_FUNC_ALT2)                      /* Selects pin function.: PORT18 (pin 28) is configured as FC7_TXD_SCL_MISO_WS */
+      | IOCON_PIO_DIGIMODE(PIO18_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
     );
   SYSCON->MCLKIO = ((SYSCON->MCLKIO &
     (~(SYSCON_MCLKIO_DIR_MASK)))                             /* Mask bits to zero which are setting */

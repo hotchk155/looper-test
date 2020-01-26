@@ -15,6 +15,12 @@ static i2s_config_t s_TxConfig;
 static i2s_handle_t s_TxHandle;
 static i2s_transfer_t s_TxTransfer;
 
+
+static i2s_config_t s_RxConfig;
+static i2s_handle_t s_RxHandle;
+static i2s_transfer_t s_RxTransfer;
+
+
 #if defined(__GNUC__) /* GNU Compiler */
 #ifndef __ALIGN_END
 #define __ALIGN_END __attribute__((aligned(4)))
@@ -73,7 +79,7 @@ __ALIGN_BEGIN uint8_t g_Rx[108*4] __ALIGN_END = {0};
 
 
 void copy_rx_to_tx() {
-	for(int i=0; i<sizeof(g_Tx); i+=4) {
+	for(unsigned int i=0; i<sizeof(g_Tx); i+=4) {
 		g_Tx[i] = g_Rx[i];
 		g_Tx[i+1] = g_Rx[i+1];
 	}
@@ -94,6 +100,15 @@ static void TxCallback(I2S_Type *base, i2s_handle_t *handle, status_t completion
     /* Enqueue the same original s_Buffer all over again */
     i2s_transfer_t *transfer = (i2s_transfer_t *)userData;
     I2S_TxTransferNonBlocking(base, handle, *transfer);
+}
+
+
+static void RxCallback(I2S_Type *base, i2s_handle_t *handle, status_t completionStatus, void *userData)
+{
+	copy_rx_to_tx();
+    /* Enqueue the same original s_Buffer all over again */
+    i2s_transfer_t *transfer = (i2s_transfer_t *)userData;
+    I2S_RxTransferNonBlocking(base, handle, *transfer);
 }
 
 static void delay(volatile uint32_t nof) {
@@ -145,22 +160,52 @@ int main(void)
     s_TxConfig.dataLength     = 16;
     s_TxConfig.frameLength     = 48;
     s_TxConfig.divider     = 8;
-    s_TxConfig.masterSlave = DEMO_I2S_TX_MODE;
+    s_TxConfig.masterSlave = kI2S_MasterSlaveNormalMaster;
 
     //TODO
     s_TxConfig.leftJust = 1;//?
     s_TxConfig.wsPol=0;//?
 
-    I2S_TxInit(DEMO_I2S_TX, &s_TxConfig);
 
+    /*
+        * masterSlave = kI2S_MasterSlaveNormalSlave;
+        * mode = kI2S_ModeI2sClassic;
+        * rightLow = false;
+        * leftJust = false;
+        * pdmData = false;
+        * sckPol = false;
+        * wsPol = false;
+        * divider = 1;
+        * oneChannel = false;
+        * dataLength = 16;
+        * frameLength = 32;
+        * position = 0;
+        * watermark = 4;
+        * txEmptyZero = false;
+        * pack48 = false;
+   */
+   I2S_RxGetDefaultConfig(&s_RxConfig);
+   s_RxConfig.dataLength     = 16;
+   s_RxConfig.frameLength     = 48;
+   s_RxConfig.divider     = 8;
+   s_RxConfig.masterSlave = kI2S_MasterSlaveNormalSlave;
+
+   I2S_TxInit(DEMO_I2S_TX, &s_TxConfig);
+   I2S_RxInit(DEMO_I2S_RX, &s_RxConfig);
 
     copy_rx_to_tx(); // clear L chan
 
     s_TxTransfer.data     = &g_Tx[0];
     s_TxTransfer.dataSize = sizeof(g_Tx);
 
+    s_RxTransfer.data     = &g_Rx[0];
+    s_RxTransfer.dataSize = sizeof(g_Rx);
+
     I2S_TxTransferCreateHandle(DEMO_I2S_TX, &s_TxHandle, TxCallback, (void *)&s_TxTransfer);
-    I2S_TxTransferNonBlocking(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer);
+    I2S_RxTransferCreateHandle(DEMO_I2S_RX, &s_RxHandle, RxCallback, (void *)&s_RxTransfer);
+
+   volatile status_t x1 = I2S_TxTransferNonBlocking(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer);
+   volatile status_t x2 = I2S_RxTransferNonBlocking(DEMO_I2S_RX, &s_RxHandle, s_RxTransfer);
 
     while (1)
     {
