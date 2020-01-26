@@ -15,6 +15,7 @@ processor_version: 7.0.1
 pin_labels:
 - {pin_num: '17', pin_signal: PIO1_3/FC7_SSEL2/SCT0_OUT6/FC3_SCK/CTIMER0_CAP1/USB0_UP_LED/ADC0_6, label: CODEC_RESET, identifier: CODEC_RESET}
 - {pin_num: '10', pin_signal: PIO1_17/MCLK/UTICK_CAP3, label: MCLK, identifier: MCLK}
+- {pin_num: '57', pin_signal: PIO1_14/FC2_RXD_SDA_MOSI/SCT0_OUT7/FC7_TXD_SCL_MISO_WS, label: SD_CSEL, identifier: SD_CSEL}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 
@@ -39,11 +40,15 @@ BOARD_InitPins:
   - {pin_num: '39', peripheral: FLEXCOMM6, signal: RXD_SDA_MOSI_DATA, pin_signal: PIO0_5/FC6_RXD_SDA_MOSI_DATA/SCT0_OUT6/CTIMER0_MAT0}
   - {pin_num: '41', peripheral: FLEXCOMM6, signal: SCK, pin_signal: PIO0_7/FC6_SCK/SCT0_OUT0/CTIMER0_MAT2/CTIMER0_CAP2}
   - {pin_num: '40', peripheral: FLEXCOMM6, signal: TXD_SCL_MISO_WS, pin_signal: PIO0_6/FC6_TXD_SCL_MISO_WS/CTIMER0_MAT1/UTICK_CAP0}
-  - {pin_num: '17', peripheral: GPIO, signal: 'PIO1, 3', pin_signal: PIO1_3/FC7_SSEL2/SCT0_OUT6/FC3_SCK/CTIMER0_CAP1/USB0_UP_LED/ADC0_6, direction: OUTPUT}
   - {pin_num: '10', peripheral: SYSCON, signal: MCLK, pin_signal: PIO1_17/MCLK/UTICK_CAP3, direction: OUTPUT}
   - {pin_num: '27', peripheral: FLEXCOMM7, signal: RXD_SDA_MOSI_DATA, pin_signal: PIO1_7/FC7_RXD_SDA_MOSI_DATA/CTIMER1_MAT2/CTIMER1_CAP2/ADC0_10}
   - {pin_num: '26', peripheral: FLEXCOMM7, signal: SCK, pin_signal: PIO1_6/FC7_SCK/CTIMER1_CAP2/CTIMER1_MAT2/USB0_VBUS/ADC0_9}
   - {pin_num: '28', peripheral: FLEXCOMM7, signal: TXD_SCL_MISO_WS, pin_signal: PIO1_8/FC7_TXD_SCL_MISO_WS/CTIMER1_MAT3/CTIMER1_CAP3/ADC0_11}
+  - {pin_num: '30', peripheral: FLEXCOMM1, signal: SCK, pin_signal: PIO1_10/FC6_TXD_SCL_MISO_WS/SCT0_OUT4/FC1_SCK/USB0_FRAME}
+  - {pin_num: '12', peripheral: FLEXCOMM1, signal: TXD_SCL_MISO, pin_signal: PIO0_30/FC1_TXD_SCL_MISO/SCT0_OUT3/CTIMER0_MAT2/CTIMER0_CAP2/ADC0_1}
+  - {pin_num: '11', peripheral: FLEXCOMM1, signal: RXD_SDA_MOSI, pin_signal: PIO0_29/FC1_RXD_SDA_MOSI/SCT0_OUT2/CTIMER0_MAT3/CTIMER0_CAP1/CTIMER0_MAT1/ADC0_0}
+  - {pin_num: '57', peripheral: GPIO, signal: 'PIO1, 14', pin_signal: PIO1_14/FC2_RXD_SDA_MOSI/SCT0_OUT7/FC7_TXD_SCL_MISO_WS, direction: OUTPUT, gpio_init_state: 'true'}
+  - {pin_num: '17', peripheral: GPIO, signal: 'PIO1, 3', pin_signal: PIO1_3/FC7_SSEL2/SCT0_OUT6/FC3_SCK/CTIMER0_CAP1/USB0_UP_LED/ADC0_6}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 
@@ -57,12 +62,22 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
   CLOCK_EnableClock(kCLOCK_Iocon);                           /* Enables the clock for the IOCON block. 0 = Disable; 1 = Enable.: 0x01u */
   CLOCK_EnableClock(kCLOCK_Gpio1);                           /* Enables the clock for the GPIO1 port registers. 0 = Disable; 1 = Enable. */
 
-  gpio_pin_config_t CODEC_RESET_io_config = {                /* PORT1 PIN3 (number: 17) GPIO configuration structure */
+  gpio_pin_config_t SD_CSEL_io_config = {                    /* PORT1 PIN14 (number: 57) GPIO configuration structure */
     .pinDirection = kGPIO_DigitalOutput,
-    .outputLogic = 0U
+    .outputLogic = 1U
   };
-  GPIO_PinInit(BOARD_INITPINS_CODEC_RESET_GPIO, BOARD_INITPINS_CODEC_RESET_PORT, BOARD_INITPINS_CODEC_RESET_PIN, &CODEC_RESET_io_config); /* Initialize GPIO functionality on pin PIO1_3 (number: 17) */
+  GPIO_PinInit(BOARD_INITPINS_SD_CSEL_GPIO, BOARD_INITPINS_SD_CSEL_PORT, BOARD_INITPINS_SD_CSEL_PIN, &SD_CSEL_io_config); /* Initialize GPIO functionality on pin PIO1_14 (number: 57) */
 
+  IOCON->PIO[0][29] = ((IOCON->PIO[0][29] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO029_FUNC_ALT1)                     /* Selects pin function.: PORT029 (pin 11) is configured as FC1_RXD_SDA_MOSI */
+      | IOCON_PIO_DIGIMODE(PIO029_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[0][30] = ((IOCON->PIO[0][30] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO030_FUNC_ALT1)                     /* Selects pin function.: PORT030 (pin 12) is configured as FC1_TXD_SCL_MISO */
+      | IOCON_PIO_DIGIMODE(PIO030_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
+    );
   IOCON->PIO[0][5] = ((IOCON->PIO[0][5] &
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
       | IOCON_PIO_FUNC(PIO05_FUNC_ALT1)                      /* Selects pin function.: PORT05 (pin 39) is configured as FC6_RXD_SDA_MOSI_DATA */
@@ -77,6 +92,16 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
       | IOCON_PIO_FUNC(PIO07_FUNC_ALT1)                      /* Selects pin function.: PORT07 (pin 41) is configured as FC6_SCK */
       | IOCON_PIO_DIGIMODE(PIO07_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[1][10] = ((IOCON->PIO[1][10] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO110_FUNC_ALT4)                     /* Selects pin function.: PORT110 (pin 30) is configured as FC1_SCK */
+      | IOCON_PIO_DIGIMODE(PIO110_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[1][14] = ((IOCON->PIO[1][14] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO114_FUNC_ALT0)                     /* Selects pin function.: PORT114 (pin 57) is configured as PIO1_14 */
+      | IOCON_PIO_DIGIMODE(PIO114_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
     );
   IOCON->PIO[1][17] = ((IOCON->PIO[1][17] &
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
