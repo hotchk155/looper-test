@@ -39,7 +39,7 @@ static i2s_transfer_t s_TxTransfer;
  * @brief One period of sine wave in 108 32-bit samples.
  * One sample contains two 16-bit channels.
  */
-__ALIGN_BEGIN uint8_t g_Music[] __ALIGN_END = {
+__ALIGN_BEGIN uint8_t g_Tx[108*4] __ALIGN_END = {
     0x00U, 0x00U, 0x00U, 0x00U, 0x71U, 0x07U, 0x71U, 0x07U, 0xDCU, 0x0EU, 0xDCU, 0x0EU, 0x39U, 0x16U, 0x39U, 0x16U,
     0x84U, 0x1DU, 0x84U, 0x1DU, 0xB5U, 0x24U, 0xB5U, 0x24U, 0xC6U, 0x2BU, 0xC6U, 0x2BU, 0xB2U, 0x32U, 0xB2U, 0x32U,
     0x71U, 0x39U, 0x71U, 0x39U, 0xFFU, 0x3FU, 0xFFU, 0x3FU, 0x55U, 0x46U, 0x55U, 0x46U, 0x6FU, 0x4CU, 0x6FU, 0x4CU,
@@ -68,6 +68,17 @@ __ALIGN_BEGIN uint8_t g_Music[] __ALIGN_END = {
     0x8FU, 0xC6U, 0x8FU, 0xC6U, 0x4EU, 0xCDU, 0x4EU, 0xCDU, 0x3AU, 0xD4U, 0x3AU, 0xD4U, 0x4BU, 0xDBU, 0x4BU, 0xDBU,
     0x7CU, 0xE2U, 0x7CU, 0xE2U, 0xC7U, 0xE9U, 0xC7U, 0xE9U, 0x24U, 0xF1U, 0x24U, 0xF1U, 0x8FU, 0xF8U, 0x8FU, 0xF8U,
 };
+
+__ALIGN_BEGIN uint8_t g_Rx[108*4] __ALIGN_END = {0};
+
+
+void copy_rx_to_tx() {
+	for(int i=0; i<sizeof(g_Tx); i+=4) {
+		g_Tx[i] = g_Rx[i];
+		g_Tx[i+1] = g_Rx[i+1];
+	}
+}
+
 
 #define DEMO_I2S_MASTER_CLOCK_FREQUENCY (44100 * 256)
 #define DEMO_I2S_TX (I2S0)
@@ -142,8 +153,11 @@ int main(void)
 
     I2S_TxInit(DEMO_I2S_TX, &s_TxConfig);
 
-    s_TxTransfer.data     = &g_Music[0];
-    s_TxTransfer.dataSize = sizeof(g_Music);
+
+    copy_rx_to_tx(); // clear L chan
+
+    s_TxTransfer.data     = &g_Tx[0];
+    s_TxTransfer.dataSize = sizeof(g_Tx);
 
     I2S_TxTransferCreateHandle(DEMO_I2S_TX, &s_TxHandle, TxCallback, (void *)&s_TxTransfer);
     I2S_TxTransferNonBlocking(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer);

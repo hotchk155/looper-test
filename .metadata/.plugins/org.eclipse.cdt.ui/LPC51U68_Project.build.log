@@ -1,6 +1,0 @@
-09:17:14 **** Incremental Build of configuration Debug for project LPC51U68_Project ****
-make -r -j8 all 
-make: Nothing to be done for 'all'.
-
-09:17:15 Build Finished. 0 errors, 0 warnings. (took 77ms)
-

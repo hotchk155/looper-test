@@ -1,8 +1,0 @@
-core_cm0plus.h:741:22:void __NVIC_EnableIRQ(IRQn_Type)	16	static
-fsl_common.h:460:28:status_t EnableIRQ(IRQn_Type)	16	static
-fsl_gpio.h:153:20:void GPIO_PinWrite(GPIO_Type*, uint32_t, uint32_t, uint8_t)	24	static
-LPC51U68_Project.cpp:81:13:void TxCallback(I2S_Type*, i2s_handle_t*, status_t, void*)	32	static
-LPC51U68_Project.cpp:88:13:void delay(uint32_t)	16	static
-LPC51U68_Project.cpp:95:5:int main()	8	static
-LPC51U68_Project.cpp:154:1:void __static_initialization_and_destruction_0(int, int)	16	static
-LPC51U68_Project.cpp:154:1:cpp)	8	static
