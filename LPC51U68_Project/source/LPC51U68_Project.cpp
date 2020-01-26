@@ -5,19 +5,25 @@
 #include "clock_config.h"
 #include "fsl_gpio.h"
 #include "fsl_i2s.h"
+#include "fsl_i2s_dma.h"
 
 
 /*******************************************************************************
  * Definitions
 
  ******************************************************************************/
+static dma_handle_t s_DmaTxHandle;
+static dma_handle_t s_DmaRxHandle;
+static i2s_dma_handle_t s_TxHandle;
+static i2s_dma_handle_t s_RxHandle;
+
 static i2s_config_t s_TxConfig;
-static i2s_handle_t s_TxHandle;
+//static i2s_handle_t s_TxHandle;
 static i2s_transfer_t s_TxTransfer;
 
 
 static i2s_config_t s_RxConfig;
-static i2s_handle_t s_RxHandle;
+//static i2s_handle_t s_RxHandle;
 static i2s_transfer_t s_RxTransfer;
 
 
@@ -94,10 +100,10 @@ void copy_rx_to_tx() {
 #define DEMO_I2S_TX_MODE (kI2S_MasterSlaveNormalMaster)
 #define DEMO_AUDIO_BIT_WIDTH (16)
 #define DEMO_AUDIO_PROTOCOL kCODEC_BusI2S
-
+/*
 static void TxCallback(I2S_Type *base, i2s_handle_t *handle, status_t completionStatus, void *userData)
 {
-    /* Enqueue the same original s_Buffer all over again */
+    // Enqueue the same original s_Buffer all over again
     i2s_transfer_t *transfer = (i2s_transfer_t *)userData;
     I2S_TxTransferNonBlocking(base, handle, *transfer);
 }
@@ -106,10 +112,27 @@ static void TxCallback(I2S_Type *base, i2s_handle_t *handle, status_t completion
 static void RxCallback(I2S_Type *base, i2s_handle_t *handle, status_t completionStatus, void *userData)
 {
 	copy_rx_to_tx();
-    /* Enqueue the same original s_Buffer all over again */
+    // Enqueue the same original s_Buffer all over again
     i2s_transfer_t *transfer = (i2s_transfer_t *)userData;
     I2S_RxTransferNonBlocking(base, handle, *transfer);
 }
+*/
+
+static void TxCallback(I2S_Type *base, i2s_dma_handle_t *handle, status_t completionStatus, void *userData)
+{
+    /* Enqueue the same original buffer all over again */
+    i2s_transfer_t *transfer = (i2s_transfer_t *)userData;
+    I2S_TxTransferSendDMA(base, handle, *transfer);
+}
+
+static void RxCallback(I2S_Type *base, i2s_dma_handle_t *handle, status_t completionStatus, void *userData)
+{
+	copy_rx_to_tx();
+    /* Enqueue the same original buffer all over again */
+    i2s_transfer_t *transfer = (i2s_transfer_t *)userData;
+    I2S_RxTransferReceiveDMA(base, handle, *transfer);
+}
+
 
 static void delay(volatile uint32_t nof) {
   while(nof!=0) {
@@ -193,6 +216,43 @@ int main(void)
    I2S_TxInit(DEMO_I2S_TX, &s_TxConfig);
    I2S_RxInit(DEMO_I2S_RX, &s_RxConfig);
 
+
+#define DEMO_I2S_TX_CHANNEL (13)
+#define DEMO_I2S_RX_CHANNEL (14)
+
+   DMA_Init(DMA0);
+   DMA_EnableChannel(DMA0, DEMO_I2S_TX_CHANNEL);
+   DMA_EnableChannel(DMA0, DEMO_I2S_RX_CHANNEL);
+   DMA_SetChannelPriority(DMA0, DEMO_I2S_TX_CHANNEL, kDMA_ChannelPriority3);
+   DMA_SetChannelPriority(DMA0, DEMO_I2S_RX_CHANNEL, kDMA_ChannelPriority2);
+   DMA_CreateHandle(&s_DmaTxHandle, DMA0, DEMO_I2S_TX_CHANNEL);
+   DMA_CreateHandle(&s_DmaRxHandle, DMA0, DEMO_I2S_RX_CHANNEL);
+
+
+   I2S_TxTransferCreateHandleDMA(DEMO_I2S_TX, &s_TxHandle, &s_DmaTxHandle, TxCallback, (void *)&s_TxTransfer);
+   I2S_RxTransferCreateHandleDMA(DEMO_I2S_RX, &s_RxHandle, &s_DmaRxHandle, RxCallback, (void *)&s_RxTransfer);
+
+   copy_rx_to_tx();
+
+   s_TxTransfer.data     = &g_Tx[0];
+   s_TxTransfer.dataSize = sizeof(g_Tx);
+
+   s_RxTransfer.data     = &g_Rx[0];
+   s_RxTransfer.dataSize = sizeof(g_Rx);
+
+
+   /* need to queue two receive buffers so when the first one is filled,
+    * the other is immediatelly starts to be filled */
+   I2S_RxTransferReceiveDMA(DEMO_I2S_RX, &s_RxHandle, s_RxTransfer);
+   I2S_RxTransferReceiveDMA(DEMO_I2S_RX, &s_RxHandle, s_RxTransfer);
+
+   /* need to queue two transmit buffers so when the first one
+    * finishes transfer, the other immediatelly starts */
+   I2S_TxTransferSendDMA(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer);
+   I2S_TxTransferSendDMA(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer);
+
+
+   /*
     copy_rx_to_tx(); // clear L chan
 
     s_TxTransfer.data     = &g_Tx[0];
@@ -206,7 +266,7 @@ int main(void)
 
    volatile status_t x1 = I2S_TxTransferNonBlocking(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer);
    volatile status_t x2 = I2S_RxTransferNonBlocking(DEMO_I2S_RX, &s_RxHandle, s_RxTransfer);
-
+*/
     while (1)
     {
     }
