@@ -27,18 +27,20 @@ extern "C" {
 void BOARD_InitBootPins(void);
 
 #define MCLKIO_DIR_OUTPUT                                                  0x01u   /*!<@brief MCLK direction control.: The MCLK function is an output. */
-#define PIO029_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
-#define PIO029_FUNC_ALT1                                                   0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
-#define PIO030_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
-#define PIO030_FUNC_ALT1                                                   0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
+#define PIO010_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO010_FUNC_ALT1                                                   0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
+#define PIO031_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO031_FUNC_ALT0                                                   0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
 #define PIO05_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO05_FUNC_ALT1                                                    0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
 #define PIO06_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO06_FUNC_ALT1                                                    0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
 #define PIO07_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO07_FUNC_ALT1                                                    0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
-#define PIO110_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
-#define PIO110_FUNC_ALT4                                                   0x04u   /*!<@brief Selects pin function.: Alternative connection 4. */
+#define PIO08_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO08_FUNC_ALT1                                                    0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
+#define PIO09_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO09_FUNC_ALT1                                                    0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
 #define PIO114_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO114_FUNC_ALT0                                                   0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
 #define PIO117_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
@@ -56,15 +58,20 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_MCLK_PORT                                              1U   /*!<@brief PORT device index: 1 */
 #define BOARD_INITPINS_MCLK_PIN                                              17U   /*!<@brief PIO1 GPIO pin index: 17 */
 
-/*! @name PIO1_14 (number 57), SD_CSEL */
-#define BOARD_INITPINS_SD_CSEL_GPIO                                         GPIO   /*!<@brief GPIO device name: GPIO */
-#define BOARD_INITPINS_SD_CSEL_PORT                                           1U   /*!<@brief PORT device index: 1 */
-#define BOARD_INITPINS_SD_CSEL_PIN                                           14U   /*!<@brief PIO1 GPIO pin index: 14 */
-
 /*! @name PIO1_3 (number 17), CODEC_RESET */
 #define BOARD_INITPINS_CODEC_RESET_GPIO                                     GPIO   /*!<@brief GPIO device name: GPIO */
 #define BOARD_INITPINS_CODEC_RESET_PORT                                       1U   /*!<@brief PORT device index: 1 */
 #define BOARD_INITPINS_CODEC_RESET_PIN                                        3U   /*!<@brief PIO1 GPIO pin index: 3 */
+
+/*! @name PIO1_14 (number 57), SD_POWER */
+#define BOARD_INITPINS_SD_POWER_GPIO                                        GPIO   /*!<@brief GPIO device name: GPIO */
+#define BOARD_INITPINS_SD_POWER_PORT                                          1U   /*!<@brief PORT device index: 1 */
+#define BOARD_INITPINS_SD_POWER_PIN                                          14U   /*!<@brief PIO1 GPIO pin index: 14 */
+
+/*! @name PIO0_31 (number 13), SD_CSEL */
+#define BOARD_INITPINS_SD_CSEL_GPIO                                         GPIO   /*!<@brief GPIO device name: GPIO */
+#define BOARD_INITPINS_SD_CSEL_PORT                                           0U   /*!<@brief PORT device index: 0 */
+#define BOARD_INITPINS_SD_CSEL_PIN                                           31U   /*!<@brief PIO0 GPIO pin index: 31 */
 
 /*!
  * @brief Configures pin routing and optionally pin electrical features.

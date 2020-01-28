@@ -51,12 +51,14 @@ void BOARD_InitBootClocks(void)
 name: BOARD_BootClockRUN
 called_from_default_init: true
 outputs:
+- {id: FXCOM2_clock.outFreq, value: 48 MHz}
 - {id: FXCOM6_clock.outFreq, value: 33.75/2 MHz}
 - {id: FXCOM7_clock.outFreq, value: 33.75/2 MHz}
 - {id: Master_clock.outFreq, value: 33.75/2 MHz}
 - {id: PLL_clock.outFreq, value: 33.75/2 MHz}
 - {id: System_clock.outFreq, value: 48 MHz}
 settings:
+- {id: SYSCON.FXCOMCLKSEL2.sel, value: SYSCON.fro_hf}
 - {id: SYSCON.FXCOMCLKSEL6.sel, value: SYSCON.PLL_BYPASS}
 - {id: SYSCON.FXCOMCLKSEL7.sel, value: SYSCON.PLL_BYPASS}
 - {id: SYSCON.MAINCLKSELA.sel, value: SYSCON.fro_hf}
@@ -113,6 +115,7 @@ void BOARD_BootClockRUN(void)
 
     /*!< Set up clock selectors - Attach clocks to the peripheries */
     CLOCK_AttachClk(kFRO_HF_to_MAIN_CLK);                  /*!< Switch MAIN_CLK to FRO_HF */
+    CLOCK_AttachClk(kFRO_HF_to_FLEXCOMM2);                  /*!< Switch FLEXCOMM2 to FRO_HF */
     CLOCK_AttachClk(kSYS_PLL_to_FLEXCOMM6);                  /*!< Switch FLEXCOMM6 to SYS_PLL */
     CLOCK_AttachClk(kSYS_PLL_to_FLEXCOMM7);                  /*!< Switch FLEXCOMM7 to SYS_PLL */
     CLOCK_AttachClk(kSYS_PLL_to_MCLK);                  /*!< Switch MCLK to SYS_PLL */

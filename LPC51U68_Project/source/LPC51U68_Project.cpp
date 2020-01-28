@@ -3,10 +3,15 @@
 #include "board.h"
 #include "pin_mux.h"
 #include "clock_config.h"
+#include "fsl_crc.h"
 #include "fsl_gpio.h"
 #include "fsl_i2s.h"
 #include "fsl_i2s_dma.h"
-
+#include "fsl_spi.h"
+#include "fsl_spi_dma.h"
+#include "fsl_mrt.h"
+#include "defs.h"
+#include "sdcard.h"
 
 /*******************************************************************************
  * Definitions
@@ -25,6 +30,7 @@ static i2s_transfer_t s_TxTransfer;
 static i2s_config_t s_RxConfig;
 //static i2s_handle_t s_RxHandle;
 static i2s_transfer_t s_RxTransfer;
+
 
 
 #if defined(__GNUC__) /* GNU Compiler */
@@ -134,11 +140,54 @@ static void RxCallback(I2S_Type *base, i2s_dma_handle_t *handle, status_t comple
 }
 
 
-static void delay(volatile uint32_t nof) {
+volatile uint32_t g_millis = 0;
+volatile uint32_t g_milli_tick = 0;
+void mydelay(volatile uint32_t nof) {
   while(nof!=0) {
     __asm("NOP");
     nof--;
   }
+}
+
+
+void wait_ms() {
+	g_milli_tick = 0;
+	while(!g_milli_tick);
+}
+
+byte is_ms_tick() {
+	if(g_milli_tick) {
+		g_milli_tick = 0;
+		return 1;
+	}
+	return 0;
+}
+
+extern "C" void MRT0_IRQHandler(void)
+{
+    /* Clear interrupt flag.*/
+    MRT_ClearStatusFlags(MRT0, kMRT_Channel_0, kMRT_TimerInterruptFlag);
+    ++g_millis;
+    g_milli_tick = 1;
+ }
+
+void init_mrt() {
+/* mrtConfig.enableMultiTask = false; */
+  mrt_config_t mrtConfig;
+  MRT_GetDefaultConfig(&mrtConfig);
+  MRT_Init(MRT0, &mrtConfig);
+
+  /* Setup Channel 0 to be repeated */
+  MRT_SetupChannelMode(MRT0, kMRT_Channel_0, kMRT_RepeatMode);
+
+  /* Enable timer interrupts for channel 0 */
+  MRT_EnableInterrupts(MRT0, kMRT_Channel_0, kMRT_TimerInterruptEnable);
+
+  /* Enable at the NVIC */
+  EnableIRQ(MRT0_IRQn);
+
+  MRT_StartTimer(MRT0, kMRT_Channel_0, USEC_TO_COUNT(1000U, CLOCK_GetFreq(kCLOCK_BusClk)));
+
 }
 
 int main(void)
@@ -155,8 +204,15 @@ int main(void)
     BOARD_InitPins();
 //    BOARD_InitDebugConsole();
 
+
+    g_millis = 0;
+    g_milli_tick = 0;
+    init_mrt();
+
+    mydelay(100000U);
+#if 0
     GPIO_PinWrite(BOARD_INITPINS_CODEC_RESET_GPIO, BOARD_INITPINS_CODEC_RESET_PORT, BOARD_INITPINS_CODEC_RESET_PIN, 0);
-    delay(100000U);
+    mydelay(100000U);
     GPIO_PinWrite(BOARD_INITPINS_CODEC_RESET_GPIO, BOARD_INITPINS_CODEC_RESET_PORT, BOARD_INITPINS_CODEC_RESET_PIN, 1);
 
 
@@ -267,6 +323,10 @@ int main(void)
    volatile status_t x1 = I2S_TxTransferNonBlocking(DEMO_I2S_TX, &s_TxHandle, s_TxTransfer);
    volatile status_t x2 = I2S_RxTransferNonBlocking(DEMO_I2S_RX, &s_RxHandle, s_RxTransfer);
 */
+#endif
+    CSDCard sd;
+    sd.init();
+    sd.deinit();
     while (1)
     {
     }
