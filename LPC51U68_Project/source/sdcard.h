@@ -15,6 +15,112 @@ class CSDCard {
 	byte m_lba_mode;
 	uint32_t m_response;
 
+	enum {
+		STATUS_POLL_RETRIES = 2000
+	};
+
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Control chip select line for the card (active low)
+	void csel(int val) {
+	    GPIO_PinWrite(BOARD_INITPINS_SD_CSEL_GPIO, BOARD_INITPINS_SD_CSEL_PORT, BOARD_INITPINS_SD_CSEL_PIN, val);
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Control 3V3 power for the card
+	void power_sd_card(int val) {
+		GPIO_PinWrite(BOARD_INITPINS_SD_POWER_GPIO, BOARD_INITPINS_SD_POWER_PORT, BOARD_INITPINS_SD_POWER_PIN, val);
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	byte tx_blocking(byte *data, int len) {
+		spi_transfer_t xfer;
+		xfer.dataSize = len;
+		xfer.txData = data;
+		xfer.rxData = NULL;
+		xfer.configFlags = 0U;
+		m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+		return(kStatus_Success == m_api_result);
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	byte rx_blocking(byte *data, int len) {
+		spi_transfer_t xfer;
+		xfer.dataSize = len;
+		xfer.txData = NULL;
+		xfer.rxData = data;
+		xfer.configFlags = 0U;
+		m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+		return(kStatus_Success == m_api_result);
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Poll SD card until a status byte is returned, API error occurs or time out
+	byte poll_for_status() {
+	    m_status = 0xFF;
+		int timeout = STATUS_POLL_RETRIES;
+		while(timeout) {
+			if(!rx_blocking(&m_status,1)) {
+				return 0;
+			}
+			else if(m_status != 0xFF) {
+				return 1;
+			}
+			--timeout;
+		}
+		return 0;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Write a command to SD card
+	byte write_command(byte cmd,  uint32_t arg, byte crc) {
+		byte msg[6] = {(byte)(cmd), (byte)(arg>>24), (byte)(arg>>16), (byte)(arg>>8), (byte)arg, crc};
+		return tx_blocking(msg,6);
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Poll SD card until a status byte is returned, API error occurs or time out
+	byte do_cmd_R1(byte cmd,  uint32_t arg = 0, byte crc = 0xFF) {
+		byte result = 0;
+		csel(0);
+		if(write_command(cmd, arg, crc)) {
+			if(poll_for_status()) {
+				result = 1;
+			}
+		}
+		csel(1);
+		return result;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Poll SD card until a status byte is returned, API error occurs or time out
+	byte do_cmd_R3R7(byte cmd,  uint32_t arg = 0, byte crc = 0xFF) {
+		byte result = 0;
+		csel(0);
+		if(write_command(cmd, arg, crc)) {
+			if(poll_for_status()) {
+				if(!(m_status & R1_ERR_MASK)) {
+					byte data[4];
+					spi_transfer_t xfer;
+					xfer.dataSize = sizeof(data);
+					xfer.txData = NULL;
+					xfer.rxData = data;
+					xfer.configFlags = 0U;
+					m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+					if(kStatus_Success == m_api_result) {
+						m_response =((uint32_t)data[0])<<24
+								| 	((uint32_t)data[1])<<16
+								| 	((uint32_t)data[2])<<8
+								| 	((uint32_t)data[3]);
+						result = 1;
+					}
+				}
+			}
+		}
+		csel(1);
+		return result;
+	}
+
 public:
 	CSDCard() {
 		m_status = 0;
@@ -25,14 +131,6 @@ public:
 
 
 
-		crc_config_t config;
-		config.polynomial    = kCRC_Polynomial_CRC_16;
-		config.reverseIn     = true;
-		config.complementIn  = false;
-		config.reverseOut    = true;
-		config.complementOut = false;
-		config.seed          = 0;
-		CRC_Init(CRC_ENGINE, &config);
 	}
 	enum {
 		SD_BLOCK_SIZE 			= 512
@@ -75,16 +173,17 @@ public:
 		ACMD41  = 0x69 //41,
 	};
 
-
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	uint16_t crc16(byte *data, int len) {
-	    CRC_WriteData(CRC_ENGINE, data, len);
-	    return CRC_Get16bitResult(CRC_ENGINE);
+	byte cmd_reset_card() {
+		if(!do_cmd_R1(CMD0, 0, 0x95)) {
+			return 0;
+		}
+		return (m_status == R1_IDLE);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	byte cmd_set_block_size(uint32_t block_size) {
-		if(!do_cmd(CMD16, block_size)) {
+		if(!do_cmd_R1(CMD16, block_size)) {
 			return 0;
 		}
 		return !(m_status & R1_ERR_MASK);
@@ -92,23 +191,16 @@ public:
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	byte cmd_read_ocr() {
-		if(!do_cmd(CMD58, 0, 1)) {
+		if(!do_cmd_R3R7(CMD58)) {
 			return 0;
 		}
 		return !(m_status & R1_ERR_MASK);
 	}
 
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	byte cmd_reset_card() {
-		if(!do_cmd(CMD0, 0, 0, 0x95)) {
-			return 0;
-		}
-		return (m_status == R1_IDLE);
-	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	byte cmd_check_voltage() {
-		if(!do_cmd(CMD8, 0x000001AA, 1, 0x87)) {
+		if(!do_cmd_R3R7(CMD8, 0x000001AA, 0x87)) {
 			return 0;
 		}
 		return !(m_status & R1_ERR_MASK);
@@ -117,13 +209,13 @@ public:
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	byte cmd_initialise_card() {
 		for(int i=0; i<1000; ++i) {
-			if(!do_cmd(ACMDXX)) {
+			if(!do_cmd_R1(ACMDXX)) {
 				return 0;
 			}
 			if(m_status != 0x01) {
 				return 0;
 			}
-			if(!do_cmd(ACMD41, 0x40000000, 1)) {
+			if(!do_cmd_R1(ACMD41, 0x40000000, 1)) {
 				return 0;
 			}
 			if(m_status == 0x00) {
@@ -137,151 +229,6 @@ public:
 		return 0;
 	}
 
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	byte cmd_read_block(uint32_t address, byte *data) {
-
-		byte result = 0;
-		csel(0); // set chip sel low
-		if(write_command(CMD17, address, 0xFF)) {
-			if(read_response_block(data)) {
-				result = 1;
-			}
-		}
-		csel(1); // set chip sel low
-	}
-
-
-
-
-	void csel(int val) {
-	    GPIO_PinWrite(BOARD_INITPINS_SD_CSEL_GPIO, BOARD_INITPINS_SD_CSEL_PORT, BOARD_INITPINS_SD_CSEL_PIN, val);
-	}
-
-
-	byte do_cmd(byte cmd,  uint32_t arg = 0, byte is_resp_data = 0, byte crc = 0xFF) {
-		byte result = 0;
-		csel(0); // set chip sel low
-		if(write_command(cmd, arg, crc)) {
-			for(int i=0; i<2000; ++i) {
-				if(is_resp_data) {
-					result = read_R3R7();
-					if(!result) {
-						break;
-					}
-				}
-				else {
-					result = read_R1();
-					if(!result) {
-						break;
-					}
-				}
-				if(m_status != 0xFF) {
-					break;
-				}
-			}
-		}
-		csel(1); // set chip sel low
-		return result;
-	}
-
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// Write a command to SD card
-	byte write_command(byte cmd,  uint32_t arg, byte crc) {
-		byte msg[6] = {(byte)(cmd), (byte)(arg>>24), (byte)(arg>>16), (byte)(arg>>8), (byte)arg, crc};
-		spi_transfer_t xfer;
-		xfer.dataSize = sizeof(msg);
-		xfer.txData = msg;
-		xfer.rxData = NULL;
-		xfer.configFlags = 0U;
-		return (kStatus_Success == SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer));
-	}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// Read an R1 response (no data payload)
-	byte read_R1() {
-	    spi_transfer_t xfer;
-	    m_status = 0xFF;
-	    m_response = 0;
-		xfer.dataSize = 1;
-		xfer.txData = NULL;
-		xfer.rxData = &m_status;
-		xfer.configFlags = 0U;
-		return (kStatus_Success == SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer));
-	}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// Read an R3 or R7 response (4-byte data payload)
-	byte read_R3R7() {
-
-	    m_status = 0xFF;
-	    m_response = 0;
-
-	    spi_transfer_t xfer;
-		xfer.dataSize = 1;
-		xfer.txData = NULL;
-		xfer.rxData = &m_status;
-		xfer.configFlags = 0U;
-		if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-			return 0;
-		}
-		if(m_status == 0xFF) {
-			return 1;
-		}
-
-		byte resp[4];
-		xfer.dataSize = 4;
-		xfer.rxData = resp;
-		if(kStatus_Success == SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-			m_response =((uint32_t)resp[1])<<24
-					| 	((uint32_t)resp[2])<<16
-					| 	((uint32_t)resp[3])<<8
-					| 	((uint32_t)resp[4]);
-			return 1;
-		}
-		else {
-			return 0;
-		}
-
-	}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	byte read_data_resp() {
-	    spi_transfer_t xfer;
-	    m_data_resp = 0xFF;
-		xfer.dataSize = 1;
-		xfer.txData = NULL;
-		xfer.rxData = &m_data_resp;
-		xfer.configFlags = 0U;
-		for(int i=0; i<1000; ++i) {
-			if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-				return 0;
-			}
-			if(m_data_resp != 0xFF) {
-				break;
-			}
-		}
-		return 1;
-	}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	byte wait_for_write() {
-	    spi_transfer_t xfer;
-	    byte result = 0x00;
-		xfer.dataSize = 1;
-		xfer.txData = NULL;
-		xfer.rxData = &result;
-		xfer.configFlags = 0U;
-		for(int i=0; i<1000; ++i) {
-			if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-				return 0;
-			}
-			if(result) {
-				break;
-			}
-		}
-		return 1;
-	}
 
 
 
@@ -511,120 +458,6 @@ public:
 	}
 
 
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	byte cmd_write_block(uint32_t address, byte *data) {
-
-		byte result = 0;
-		csel(0); // set chip sel low
-		if(write_command(CMD24, address, 0xFF)) {
-			if(read_R1()) {
-				if(m_status == 0x00) {
-
-					for(int j=0; j<10000; ++j) {
-						 __asm volatile ("NOP");
-					}
-					if(write_data_block(data)) {
-						if(read_data_resp()) {
-							if((m_data_resp & 0x1F) == 0x05) {
-								if(wait_for_write()) {
-									result = 1;
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		csel(1); // set chip sel low
-	}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	byte write_data_block(byte *data) {
-	    spi_transfer_t xfer;
-
-		csel(0); // set chip sel low
-
-		byte token = 0xFE; // need to change for multiple block write
-		xfer.dataSize = 1;
-		xfer.txData = &token;
-		xfer.rxData = NULL;
-		xfer.configFlags = 0U;
-		if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-			return 0;
-		}
-
-		xfer.dataSize = SD_BLOCK_SIZE;
-		xfer.txData = data;
-		xfer.rxData = NULL;
-		xfer.configFlags = 0U;
-		if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-			return 0;
-		}
-		uint16_t crc = 0xFFFF;
-		xfer.dataSize = 2;
-		xfer.txData = (byte*)&crc;
-		xfer.rxData = NULL;
-		xfer.configFlags = 0U;
-		if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-			return 0;
-		}
-		return 1;
-	}
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	byte read_response_block(byte * buf) {
-
-	    m_status = 0xFF;
-	    m_response = 0;
-
-	    spi_transfer_t xfer;
-		xfer.dataSize = 1;
-		xfer.txData = NULL;
-		xfer.rxData = &m_status;
-		xfer.configFlags = 0U;
-
-		int i;
-		for(i=0; i<1000; ++i) {
-			if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-				return 0;
-			}
-			if(m_status != 0xFF) {
-				break;
-			}
-		}
-		if(0x00 != m_status) {
-			return 0;
-		}
-		for(i=0; i<1000; ++i) {
-			if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-				return 0;
-			}
-			if(m_status != 0xFF) {
-				break;
-			}
-		}
-		if(0xFC != (m_status & 0xFC)) {
-			return 0;
-		}
-
-
-
-		xfer.dataSize = SD_BLOCK_SIZE;
-		xfer.rxData = buf;
-		if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-			return 0;
-		}
-
-		uint16_t crc = 0;
-		xfer.dataSize = 2;
-		xfer.rxData = (byte*)&crc;
-		if(kStatus_Success != SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer)) {
-			return 0;
-		}
-
-		return 1;
-	}
-
-
 
 
 	byte init() {
@@ -650,9 +483,9 @@ public:
 		csel(1); // set chip sel high
 
 		// power cycle the SD card
-	    GPIO_PinWrite(BOARD_INITPINS_SD_POWER_GPIO, BOARD_INITPINS_SD_POWER_PORT, BOARD_INITPINS_SD_POWER_PIN, 0);
+		power_sd_card(0);
 	    mydelay(10000U);
-	    GPIO_PinWrite(BOARD_INITPINS_SD_POWER_GPIO, BOARD_INITPINS_SD_POWER_PORT, BOARD_INITPINS_SD_POWER_PIN, 1);
+	    power_sd_card(1);
 	    mydelay(100000U);
 
 		SPI_MasterGetDefaultConfig(&config);
@@ -708,14 +541,14 @@ public:
 			block[i]=(byte)i;
 		}
 		//send_data(1024, block);
-		read_data(1024, block);
+		//read_data(1024, block);
 		return 1;
 	}
 
 	void deinit() {
-	    GPIO_PinWrite(BOARD_INITPINS_SD_POWER_GPIO, BOARD_INITPINS_SD_POWER_PORT, BOARD_INITPINS_SD_POWER_PIN, 0);
 	    SPI_Enable(SDCARD_SPI_BASE,0);
 		SPI_Deinit(SDCARD_SPI_BASE);
+	    power_sd_card(0);
 	}
 
 
