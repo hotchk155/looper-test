@@ -292,6 +292,10 @@ public:
 		ST_WRITE2,
 		ST_WRITE3,
 		ST_WRITE4,
+		ST_READ0,
+		ST_READ1,
+		ST_READ2,
+		ST_READ3,
 		ST_FATAL,
 		ST_STOP,
 
@@ -303,6 +307,7 @@ public:
 	byte m_state = ST_READY;
 	byte m_cmd_buf[6];
 	byte m_tx_buf[1+512+2];
+	byte m_rx_buf[512+2];
 	uint32_t m_addr;
 	int m_retry;
 	status_t m_api_result;
@@ -313,6 +318,13 @@ public:
 		m_tx_buf[513] = 0xFF;
 		m_tx_buf[514] = 0xFF;
 		m_state = ST_WRITE0;
+		while(m_state != ST_READY) {
+			run();
+		}
+	}
+	void read_data(	uint32_t addr, byte *data) {
+		m_addr = addr;
+		m_state = ST_READ0;
 		while(m_state != ST_READY) {
 			run();
 		}
@@ -400,6 +412,91 @@ public:
 				m_state = ST_FATAL;
 			}
 			else if(m_status == 0xFF) {
+				csel(1); // de-assert CSEL
+				m_state = ST_READY;
+			}
+			break;
+
+
+		case ST_READ0:
+			////////////////////////////////////////////////////////////////////////////////////////////////////////
+			csel(0);
+			m_cmd_buf[0] = CMD17;
+			m_cmd_buf[1] = (byte)(m_addr>>24);
+			m_cmd_buf[2] = (byte)(m_addr>>16);
+			m_cmd_buf[3] = (byte)(m_addr>>8);
+			m_cmd_buf[4] = (byte)(m_addr);
+			m_cmd_buf[5] = 0xFF;
+			xfer.dataSize = 6;
+			xfer.txData = m_cmd_buf;
+			xfer.rxData = NULL;
+			xfer.configFlags = 0U;
+			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+			if(kStatus_Success != m_api_result) {
+				m_state = ST_FATAL;
+			}
+			else {
+				m_retry = 2000;
+				m_state = ST_READ1;
+			}
+			break;
+			////////////////////////////////////////////////////////////////////////////////////////////////////////
+		case ST_READ1:
+			xfer.dataSize = 1;
+			xfer.txData = NULL;
+			xfer.rxData = &m_status;
+			xfer.configFlags = 0U;
+			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+			if(kStatus_Success != m_api_result) {
+				m_state = ST_FATAL;
+			}
+			else if(m_status == 0xFF) {
+				if(!--m_retry) {
+					m_state = ST_FATAL; // timeout
+				}
+			}
+			else if(m_status != 0x00) {
+				m_state = ST_FATAL; // timeout
+			}
+			else {
+				m_retry = 2000;
+				m_state = ST_READ2;
+			}
+			break;
+			////////////////////////////////////////////////////////////////////////////////////////////////////////
+		case ST_READ2:
+			xfer.dataSize = 1;
+			xfer.txData = NULL;
+			xfer.rxData = &m_status;
+			xfer.configFlags = 0U;
+			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+			if(kStatus_Success != m_api_result) {
+				m_state = ST_FATAL;
+			}
+			else if(m_status == 0xFF) {
+				if(!--m_retry) {
+					m_state = ST_FATAL; // timeout
+				}
+			}
+			else if(m_status == 0xFE) {
+				m_state = ST_READ3;
+			}
+			else {
+				m_state = ST_FATAL;
+			}
+			break;
+			////////////////////////////////////////////////////////////////////////////////////////////////////////
+		case ST_READ3:
+			xfer.dataSize = 512+2;
+			xfer.txData = NULL;
+			xfer.rxData = m_rx_buf;
+			xfer.configFlags = 0U;
+			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+			if(kStatus_Success != m_api_result) {
+				m_state = ST_FATAL;
+			}
+			else {
+				csel(1); // de-assert CSEL
 				m_state = ST_READY;
 			}
 			break;
@@ -610,7 +707,8 @@ public:
 		for(int i=0; i<sizeof(block); ++i) {
 			block[i]=(byte)i;
 		}
-		send_data(1024, block);
+		//send_data(1024, block);
+		read_data(1024, block);
 		return 1;
 	}
 
