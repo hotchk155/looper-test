@@ -8,14 +8,14 @@
 #ifndef LOOPER_H_
 #define LOOPER_H_
 
-
-
-class CLooper {
 	enum {
 		NUM_BLOCKS = 128,
 	};
 
-	DBLK m_loop[NUM_BLOCKS]; // the big buffer for the looper
+	__DATA(SRAM0) DBLK m_loop[NUM_BLOCKS]; // the big buffer for the looper
+
+
+class CLooper {
 
 	enum {
 		INIT_MODE,

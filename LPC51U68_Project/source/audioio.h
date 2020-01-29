@@ -10,6 +10,7 @@
 
 #define I2S_TX_MODULE (I2S0)
 #define I2S_RX_MODULE (I2S1)
+#define I2S_DMA_MODULE (DMA0)
 #define I2S_TX_DMA_CHANNEL (13)
 #define I2S_RX_DMA_CHANNEL (14)
 
@@ -32,10 +33,10 @@ class CAudioIO {
 		SZ_DMA_BLOCK = (256 * 2 * 2) // 256 samples x 2 channels x 16 bits
 	};
 
-	__DATA(RAM2) byte m_tx_buf0[SZ_DMA_BLOCK] __attribute__((aligned(4))) = {0};
-	__DATA(RAM2) byte m_tx_buf1[SZ_DMA_BLOCK] __attribute__((aligned(4))) = {0};
-	__DATA(RAM2) byte m_rx_buf0[SZ_DMA_BLOCK] __attribute__((aligned(4))) = {0};
-	__DATA(RAM2) byte m_rx_buf1[SZ_DMA_BLOCK] __attribute__((aligned(4))) = {0};
+	byte m_tx_buf0[SZ_DMA_BLOCK] __attribute__((aligned(4)));
+	byte m_tx_buf1[SZ_DMA_BLOCK] __attribute__((aligned(4)));
+	byte m_rx_buf0[SZ_DMA_BLOCK] __attribute__((aligned(4)));
+	byte m_rx_buf1[SZ_DMA_BLOCK] __attribute__((aligned(4)));
 
 	byte m_tx_toggle;
 	byte m_rx_toggle;
@@ -67,15 +68,12 @@ class CAudioIO {
 	    GPIO_PinWrite(BOARD_INITPINS_CODEC_RESET_GPIO, BOARD_INITPINS_CODEC_RESET_PORT, BOARD_INITPINS_CODEC_RESET_PIN, 1);
 	}
 public:
-
-
-	//#define DEMO_I2S_MASTER_CLOCK_FREQUENCY (44100 * 256)
-	//#define DEMO_I2S_TX (I2S0)
-	//#define DEMO_I2S_RX (I2S1)
-	//#define DEMO_I2S_CLOCK_DIVIDER (CLOCK_GetPllOutFreq() / 44100U / 16U / 2U)
-	//#define DEMO_I2S_RX_MODE (kI2S_MasterSlaveNormalSlave)
-	//#define DEMO_I2S_TX_MODE (kI2S_MasterSlaveNormalMaster)
-
+	CAudioIO() {
+		memset(m_tx_buf0, 0, sizeof m_tx_buf0);
+		memset(m_tx_buf1, 0, sizeof m_tx_buf1);
+		memset(m_rx_buf0, 0, sizeof m_rx_buf0);
+		memset(m_rx_buf1, 0, sizeof m_rx_buf1);
+	}
 
 
 
@@ -110,13 +108,13 @@ public:
 	   config.masterSlave = kI2S_MasterSlaveNormalSlave;
 	   I2S_RxInit(I2S_RX_MODULE, &config);
 
-	   DMA_Init(DMA0);
-	   DMA_EnableChannel(DMA0, I2S_TX_DMA_CHANNEL);
-	   DMA_EnableChannel(DMA0, I2S_RX_DMA_CHANNEL);
-	   DMA_SetChannelPriority(DMA0, I2S_TX_DMA_CHANNEL, kDMA_ChannelPriority3);
-	   DMA_SetChannelPriority(DMA0, I2S_RX_DMA_CHANNEL, kDMA_ChannelPriority2);
-	   DMA_CreateHandle(&m_dma_tx_handle, DMA0, I2S_TX_DMA_CHANNEL);
-	   DMA_CreateHandle(&m_dma_rx_handle, DMA0, I2S_RX_DMA_CHANNEL);
+	   DMA_Init(I2S_DMA_MODULE);
+	   DMA_EnableChannel(I2S_DMA_MODULE, I2S_TX_DMA_CHANNEL);
+	   DMA_EnableChannel(I2S_DMA_MODULE, I2S_RX_DMA_CHANNEL);
+	   DMA_SetChannelPriority(I2S_DMA_MODULE, I2S_TX_DMA_CHANNEL, kDMA_ChannelPriority3);
+	   DMA_SetChannelPriority(I2S_DMA_MODULE, I2S_RX_DMA_CHANNEL, kDMA_ChannelPriority2);
+	   DMA_CreateHandle(&m_dma_tx_handle, I2S_DMA_MODULE, I2S_TX_DMA_CHANNEL);
+	   DMA_CreateHandle(&m_dma_rx_handle, I2S_DMA_MODULE, I2S_RX_DMA_CHANNEL);
 
 	   m_tx_transfer0.data = m_tx_buf0;
 	   m_tx_transfer1.data = m_tx_buf1;
@@ -137,19 +135,19 @@ public:
 		m_rx_toggle = 0;
 		m_tx_toggle = 0;
 
-	   /* need to queue two receive buffers so when the first one is filled,
-	    * the other is immediatelly starts to be filled */
-	   I2S_RxTransferReceiveDMA(I2S_RX_MODULE, &m_rx_handle, m_rx_transfer0);
-	   I2S_RxTransferReceiveDMA(I2S_RX_MODULE, &m_rx_handle, m_rx_transfer1);
+		// queue both rx buffers for DMA so that the second can start up while we handle the
+		// callback at the end of the first. The receiving I2S module is slaved to the transmitting
+		// module, so transfer starts only when transmit module is done
+		I2S_RxTransferReceiveDMA(I2S_RX_MODULE, &m_rx_handle, m_rx_transfer0);
+		I2S_RxTransferReceiveDMA(I2S_RX_MODULE, &m_rx_handle, m_rx_transfer1);
 
-	   /* need to queue two transmit buffers so when the first one
-	    * finishes transfer, the other immediatelly starts */
-	   I2S_TxTransferSendDMA(I2S_TX_MODULE, &m_tx_handle, m_tx_transfer0);
-	   I2S_TxTransferSendDMA(I2S_TX_MODULE, &m_tx_handle, m_tx_transfer1);
+		// queue both tx buffers for DMA for same reason
+		I2S_TxTransferSendDMA(I2S_TX_MODULE, &m_tx_handle, m_tx_transfer0);
+		I2S_TxTransferSendDMA(I2S_TX_MODULE, &m_tx_handle, m_tx_transfer1);
 	}
 
 
-
+	//TODO error checking
 	inline void tx_callback(I2S_Type *base, i2s_dma_handle_t *handle, status_t completionStatus, void *userData) {
 		DBLK block;
 
