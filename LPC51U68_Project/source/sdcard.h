@@ -1,12 +1,18 @@
-/*
- * sdcard.h
- *
- *  Created on: 26 Jan 2020
- *      Author: jason
- */
-
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// DRIVER FOR DIRECT ACCESS TO SD CARD
 #ifndef SDCARD_H_
 #define SDCARD_H_
+
+
+class IStorageController {
+public:
+	enum {
+		IDLE,
+		READ_BLOCKS,
+		WRITE_BLOCKS
+	};
+	virtual int get_storage_request(uint32_t *addr, byte **data, int *len) = 0;
+};
 
 #define SDCARD_SPI_BASE SPI2
 class CSDCard {
@@ -33,6 +39,7 @@ class CSDCard {
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Send data to SD card in blocking mode (used during initialisation)
 	byte tx_blocking(byte *data, int len) {
 		spi_transfer_t xfer;
 		xfer.dataSize = len;
@@ -44,6 +51,7 @@ class CSDCard {
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Receive data from SD card in blocking mode (used during initialisation)
 	byte rx_blocking(byte *data, int len) {
 		spi_transfer_t xfer;
 		xfer.dataSize = len;
@@ -72,14 +80,14 @@ class CSDCard {
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// Write a command to SD card
+	// Write a command, with 32-bit argument and CRC to SD card
 	byte write_command(byte cmd,  uint32_t arg, byte crc) {
 		byte msg[6] = {(byte)(cmd), (byte)(arg>>24), (byte)(arg>>16), (byte)(arg>>8), (byte)arg, crc};
 		return tx_blocking(msg,6);
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// Poll SD card until a status byte is returned, API error occurs or time out
+	// Execute a full command, in blocking mode, where R1 response type is expected (status only)
 	byte do_cmd_R1(byte cmd,  uint32_t arg = 0, byte crc = 0xFF) {
 		byte result = 0;
 		csel(0);
@@ -93,7 +101,7 @@ class CSDCard {
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// Poll SD card until a status byte is returned, API error occurs or time out
+	// Execute a full command, in blocking mode, where R3/R7 response type is expected (status with 32-bit payload)
 	byte do_cmd_R3R7(byte cmd,  uint32_t arg = 0, byte crc = 0xFF) {
 		byte result = 0;
 		csel(0);
@@ -537,7 +545,7 @@ public:
 
 
 		byte block[512] = {0};
-		for(int i=0; i<sizeof(block); ++i) {
+		for(int i=0; i<(int)sizeof(block); ++i) {
 			block[i]=(byte)i;
 		}
 		//send_data(1024, block);
