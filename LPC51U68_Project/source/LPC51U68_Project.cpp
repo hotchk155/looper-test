@@ -19,6 +19,13 @@
 #include "audioio.h"
 
 int main(void) {
+
+	BOARD_InitBootClocks();
+    BOARD_InitPins();
+
+    g_clock.init();
+	g_audioio.init();
+	g_audioio.start();
 	for(;;);
 }
 
