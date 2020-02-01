@@ -179,14 +179,14 @@ public:
 		if(m_tx_toggle) {
 			// fill buffer #1 up with new audio and queue it again (if we fail to get more audio we'll keep
 			// playing the same buffer content again...)
-			if(g_looper.get_audio_out(&block)) {
+			if(g_block_buffer.get_audio_out(&block)) {
 				mono2stereo(&block, m_tx_buf1);
 			}
 			I2S_TxTransferSendDMA(base, handle, m_tx_transfer1);
 		}
 		else {
 			// fill buffer #0 up with new audio and queue it again
-			if(g_looper.get_audio_out(&block)) {
+			if(g_block_buffer.get_audio_out(&block)) {
 				mono2stereo(&block, m_tx_buf0);
 			}
 			I2S_TxTransferSendDMA(base, handle, m_tx_transfer0);
@@ -216,7 +216,7 @@ public:
 		m_rx_toggle = !m_rx_toggle;
 
 		// throw the audio block over to the looper
-		g_looper.on_audio_in(&block);
+		g_block_buffer.handle_audio_in(&block);
 	}
 
 };

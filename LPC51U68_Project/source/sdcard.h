@@ -3,28 +3,97 @@
 #ifndef SDCARD_H_
 #define SDCARD_H_
 
-
-class IStorageController {
-public:
-	enum {
-		IDLE,
-		READ_BLOCKS,
-		WRITE_BLOCKS
-	};
-	virtual int get_storage_request(uint32_t *addr, byte **data, int *len) = 0;
-};
-
 #define SDCARD_SPI_BASE SPI2
 class CSDCard {
+	enum {
+		STATUS_POLL_RETRIES = 2000
+	};
+	enum {
+		R1_IDLE				= 0x01,
+		R1_ERASE_RESET		= 0x02,
+		R1_COMMAND_ERR		= 0x04,
+		R1_CRC_ERR			= 0x08,
+		R1_ERASE_SEQ_ERR	= 0x10,
+		R1_ADDRESS_ERR		= 0x20,
+		R1_PARAMETER_ERR	= 0x40,
+
+		R1_ERR_MASK			= 0x7E,
+
+		OCR_2V7_2V8			= (1U<<15),
+		OCR_2V8_2V9			= (1U<<16),
+		OCR_2V9_3V0			= (1U<<17),
+		OCR_3V0_3V1			= (1U<<18),
+		OCR_3V1_3V2			= (1U<<19),
+		OCR_3V2_3V3			= (1U<<20),
+		OCR_3V3_3V4			= (1U<<21),
+		OCR_3V4_3V5			= (1U<<22),
+		OCR_3V5_3V6			= (1U<<23),
+		OCR_HIGH_CAPACITY	= (1U<<30),
+		OCR_POWER_STATUS	= (1U<<31),
+
+		DATA_SINGLE_BLOCK	= 0xFE,
+		DATA_MULTI_BLOCK	= 0xFC,
+		DATA_STOP_TRAN		= 0xFD
+	};
+	enum {
+		CMD0	= 0x40, //0,	//None(0)	R1	No	GO_IDLE_STATE	Software reset.
+		CMD1	= 0x41, //1,	//None(0)	R1	No	SEND_OP_COND	Initiate initialization process.
+		CMD8	= 0x48, //8, //*3	R7	No	SEND_IF_COND	For only SDC V2. Check voltage range.
+		CMD16	= 0x50, //16,	//Block length[31:0]	R1	No	SET_BLOCKLEN	Change R/W block size.
+		CMD17	= 0x51, //17, //	Address[31:0]	R1	Yes	READ_SINGLE_BLOCK	Read a block.
+		CMD18	= 0x52, //18, //	Address[31:0]	R1	Yes	READ_MULTIPLE_BLOCK	Read multiple blocks.
+		CMD24	= 0x58, //24,	//Address[31:0]	R1	Yes	WRITE_BLOCK	Write a block.
+		CMD25	= 0x59, //25,	//Address[31:0]	R1	Yes	WRITE_MULTIPLE_BLOCK	Write multiple blocks.
+		CMD58	= 0x7A, //58,	//None(0)	R3	No	READ_OCR	Read OCR.
+		ACMDXX  = 0x77, //55,
+		ACMD41  = 0x69 //41,
+	};
+
+	enum {
+		ST_READY,
+		ST_WRITE0,
+		ST_WRITE1,
+		ST_WRITE2,
+		ST_WRITE3,
+		ST_WRITE4,
+		ST_READ0,
+		ST_READ1,
+		ST_READ2,
+		ST_READ3,
+		ST_FATAL,
+		ST_STOP,
+
+	};
+
+	typedef struct {
+		byte status;
+		DBLK data;
+		byte crc_hi;
+		byte crc_lo;
+	} SD_DATA_PACKET;
+
 	byte m_data_resp;
 	byte m_status;
 	byte m_lba_mode;
 	uint32_t m_response;
 
-	enum {
-		STATUS_POLL_RETRIES = 2000
-	};
+	SD_DATA_PACKET m_data_packet;
+	byte m_state = ST_READY;
+	byte m_cmd_buf[6];
+	int m_retry;
+	status_t m_api_result;
 
+
+
+
+	//////////////////////////////////////////////
+	//
+	//
+	//       AAAAAAAAAAAAAAAA
+	//  +-----------------------------+
+	//
+	//  AAAAA               AAAAAAAAAAA
+	//  +-----------------------------+
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Control chip select line for the card (active low)
@@ -135,51 +204,7 @@ public:
 		m_response = 0;
 		m_data_resp = 0;
 		m_lba_mode = 0;
-
-
-
-
 	}
-	enum {
-		SD_BLOCK_SIZE 			= 512
-	};
-	enum {
-		R1_IDLE				= 0x01,
-		R1_ERASE_RESET		= 0x02,
-		R1_COMMAND_ERR		= 0x04,
-		R1_CRC_ERR			= 0x08,
-		R1_ERASE_SEQ_ERR	= 0x10,
-		R1_ADDRESS_ERR		= 0x20,
-		R1_PARAMETER_ERR	= 0x40,
-
-		R1_ERR_MASK			= 0x7E,
-
-		OCR_2V7_2V8			= (1U<<15),
-		OCR_2V8_2V9			= (1U<<16),
-		OCR_2V9_3V0			= (1U<<17),
-		OCR_3V0_3V1			= (1U<<18),
-		OCR_3V1_3V2			= (1U<<19),
-		OCR_3V2_3V3			= (1U<<20),
-		OCR_3V3_3V4			= (1U<<21),
-		OCR_3V4_3V5			= (1U<<22),
-		OCR_3V5_3V6			= (1U<<23),
-		OCR_HIGH_CAPACITY	= (1U<<30),
-		OCR_POWER_STATUS	= (1U<<31)
-
-	};
-	enum {
-		CMD0	= 0x40, //0,	//None(0)	R1	No	GO_IDLE_STATE	Software reset.
-		CMD1	= 0x41, //1,	//None(0)	R1	No	SEND_OP_COND	Initiate initialization process.
-		CMD8	= 0x48, //8, //*3	R7	No	SEND_IF_COND	For only SDC V2. Check voltage range.
-		CMD16	= 0x50, //16,	//Block length[31:0]	R1	No	SET_BLOCKLEN	Change R/W block size.
-		CMD17	= 0x51, //17, //	Address[31:0]	R1	Yes	READ_SINGLE_BLOCK	Read a block.
-		CMD18	= 0x52, //18, //	Address[31:0]	R1	Yes	READ_MULTIPLE_BLOCK	Read multiple blocks.
-		CMD24	= 0x58, //24,	//Address[31:0]	R1	Yes	WRITE_BLOCK	Write a block.
-		CMD25	= 0x59, //25,	//Address[31:0]	R1	Yes	WRITE_MULTIPLE_BLOCK	Write multiple blocks.
-		CMD58	= 0x7A, //58,	//None(0)	R3	No	READ_OCR	Read OCR.
-		ACMDXX  = 0x77, //55,
-		ACMD41  = 0x69 //41,
-	};
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	byte cmd_reset_card() {
@@ -237,35 +262,7 @@ public:
 		return 0;
 	}
 
-
-
-
-	enum {
-		ST_READY,
-		ST_WRITE0,
-		ST_WRITE1,
-		ST_WRITE2,
-		ST_WRITE3,
-		ST_WRITE4,
-		ST_READ0,
-		ST_READ1,
-		ST_READ2,
-		ST_READ3,
-		ST_FATAL,
-		ST_STOP,
-
-	};
-
-	enum {
-		SZ_DATA_PACKET = 1 + 512 + 2
-	};
-	byte m_state = ST_READY;
-	byte m_cmd_buf[6];
-	byte m_tx_buf[1+512+2];
-	byte m_rx_buf[512+2];
-	uint32_t m_addr;
-	int m_retry;
-	status_t m_api_result;
+	/*
 	void send_data(	uint32_t addr, byte *data) {
 		m_addr = addr;
 		m_tx_buf[0] = 0xFE;
@@ -284,28 +281,68 @@ public:
 			run();
 		}
 	}
+*/
+
+
+	byte check_for_write_block() {
+		if(g_block_buffer.get_next_block_for_sd(&m_data_packet.data, &m_block_addr)) {
+			m_data_packet.status = DATA_SINGLE_BLOCK;
+			m_data_packet.crc_hi = 0xFF;
+			m_data_packet.crc_lo = 0xFF;
+			return 1;
+		}
+		return 0;
+	}
+	byte check_for_read_block() {
+		return g_block_buffer.get_next_block_from_sd(&m_block_addr);
+	}
+
+
+
+	byte sd_tx(byte *data, int len) {
+		spi_transfer_t xfer;
+		xfer.dataSize = len;
+		xfer.txData = data;
+		xfer.rxData = NULL;
+		xfer.configFlags = 0U;
+		m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+		return (kStatus_Success == m_api_result);
+	}
+
+	byte sd_rx(byte *data, int len) {
+		spi_transfer_t xfer;
+		xfer.dataSize = len;
+		xfer.txData = NULL;
+		xfer.rxData = data;
+		xfer.configFlags = 0U;
+		m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+		return (kStatus_Success == m_api_result);
+	}
+
 	void run() {
-
-	    spi_transfer_t xfer;
-
-
-
+		SD_ADDR sd_addr;
 		switch(m_state) {
+		////////////////////////////////////////////////////////////////////////////////////////////////////////
+		case ST_READY:
+			if(check_for_read_block()) {
+				m_state = ST_READ0;
+			}
+			else if(check_for_write_block()) {
+				m_state = ST_WRITE0;
+			}
+			break;
+		////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// Start a new write
 		case ST_WRITE0: // Send the CMD24
-			////////////////////////////////////////////////////////////////////////////////////////////////////////
+			sd_addr = block2addr(m_block_addr);
 			csel(0);
 			m_cmd_buf[0] = CMD24;
-			m_cmd_buf[1] = (byte)(m_addr>>24);
-			m_cmd_buf[2] = (byte)(m_addr>>16);
-			m_cmd_buf[3] = (byte)(m_addr>>8);
-			m_cmd_buf[4] = (byte)(m_addr);
+			m_cmd_buf[1] = (byte)(sd_addr>>24);
+			m_cmd_buf[2] = (byte)(sd_addr>>16);
+			m_cmd_buf[3] = (byte)(sd_addr>>8);
+			m_cmd_buf[4] = (byte)(sd_addr);
 			m_cmd_buf[5] = 0xFF;
-			xfer.dataSize = 6;
-			xfer.txData = m_cmd_buf;
-			xfer.rxData = NULL;
-			xfer.configFlags = 0U;
-			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-			if(kStatus_Success != m_api_result) {
+			if(!sd_tx(m_cmd_buf, 6)) {
 				m_state = ST_FATAL;
 			}
 			else {
@@ -315,12 +352,7 @@ public:
 			break;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_WRITE1: // Wait for response to CMD24
-			xfer.dataSize = 1;
-			xfer.txData = NULL;
-			xfer.rxData = &m_status;
-			xfer.configFlags = 0U;
-			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-			if(kStatus_Success != m_api_result) {
+			if(!sd_rx(&m_status, 1)) {
 				m_state = ST_FATAL;
 			}
 			else if(m_status == 0xFF) {
@@ -344,12 +376,7 @@ public:
 			break;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_WRITE3: // data packet
-			xfer.dataSize = sizeof(m_tx_buf);
-			xfer.txData = m_tx_buf;
-			xfer.rxData = NULL;
-			xfer.configFlags = 0U;
-			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-			if(kStatus_Success != m_api_result) {
+			if(!sd_tx((byte*)&m_data_packet, sizeof(m_data_packet))) {
 				m_state = ST_FATAL;
 			}
 			else {
@@ -358,17 +385,22 @@ public:
 			break;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_WRITE4: // wait for card to drive DO high
-			xfer.dataSize = 1;
-			xfer.txData = NULL;
-			xfer.rxData = &m_status;
-			xfer.configFlags = 0U;
-			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-			if(kStatus_Success != m_api_result) {
+			if(!sd_rx((byte*)&m_status, 1)) {
 				m_state = ST_FATAL;
 			}
-			else if(m_status == 0xFF) {
+			else if(m_status == 0xFF) { // ready for next
+
 				csel(1); // de-assert CSEL
-				m_state = ST_READY;
+
+				if(check_for_write_block()) {
+					m_state = ST_WRITE0;
+				}
+				else if(check_for_read_block()) {
+					m_state = ST_READ0;
+				}
+				else {
+					m_state = ST_READY;
+				}
 			}
 			break;
 
@@ -376,18 +408,14 @@ public:
 		case ST_READ0:
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 			csel(0);
+			sd_addr = block2addr(m_block_addr);
 			m_cmd_buf[0] = CMD17;
-			m_cmd_buf[1] = (byte)(m_addr>>24);
-			m_cmd_buf[2] = (byte)(m_addr>>16);
-			m_cmd_buf[3] = (byte)(m_addr>>8);
-			m_cmd_buf[4] = (byte)(m_addr);
+			m_cmd_buf[1] = (byte)(sd_addr>>24);
+			m_cmd_buf[2] = (byte)(sd_addr>>16);
+			m_cmd_buf[3] = (byte)(sd_addr>>8);
+			m_cmd_buf[4] = (byte)(sd_addr);
 			m_cmd_buf[5] = 0xFF;
-			xfer.dataSize = 6;
-			xfer.txData = m_cmd_buf;
-			xfer.rxData = NULL;
-			xfer.configFlags = 0U;
-			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-			if(kStatus_Success != m_api_result) {
+			if(!sd_tx((byte*)&m_cmd_buf, 6)) {
 				m_state = ST_FATAL;
 			}
 			else {
@@ -397,12 +425,7 @@ public:
 			break;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_READ1:
-			xfer.dataSize = 1;
-			xfer.txData = NULL;
-			xfer.rxData = &m_status;
-			xfer.configFlags = 0U;
-			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-			if(kStatus_Success != m_api_result) {
+			if(!sd_rx((byte*)&m_status, 1)) {
 				m_state = ST_FATAL;
 			}
 			else if(m_status == 0xFF) {
@@ -420,12 +443,7 @@ public:
 			break;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_READ2:
-			xfer.dataSize = 1;
-			xfer.txData = NULL;
-			xfer.rxData = &m_status;
-			xfer.configFlags = 0U;
-			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-			if(kStatus_Success != m_api_result) {
+			if(!sd_rx(&m_status, 1)) {
 				m_state = ST_FATAL;
 			}
 			else if(m_status == 0xFF) {
@@ -442,17 +460,22 @@ public:
 			break;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_READ3:
-			xfer.dataSize = 512+2;
-			xfer.txData = NULL;
-			xfer.rxData = m_rx_buf;
-			xfer.configFlags = 0U;
-			m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-			if(kStatus_Success != m_api_result) {
+			if(!sd_rx(&m_data_packet[1], sizeof(m_data_packet) - 1)) {
 				m_state = ST_FATAL;
 			}
 			else {
 				csel(1); // de-assert CSEL
-				m_state = ST_READY;
+
+				g_block_buffer.put_block_from_sd(&m_data_packet.data);
+				if(check_for_read_block()) {
+					m_state = ST_READ0;
+				}
+				else if(check_for_write_block()) {
+					m_state = ST_WRITE0;
+				}
+				else {
+					m_state = ST_READY;
+				}
 			}
 			break;
 
@@ -513,18 +536,7 @@ public:
 		xfer.configFlags = 0U;
 	    SPI_SetDummyData(SDCARD_SPI_BASE,0xFF);
 		SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-
-
-		volatile status_t k = SPI_MasterSetBaud(SDCARD_SPI_BASE, 1000000U, CLOCK_GetFroHfFreq());
-
-	    //SPI_Enable(SDCARD_SPI_BASE,0);
-		//SPI_Deinit(SDCARD_SPI_BASE);
-
-
-//		SPI_MasterGetDefaultConfig(&config);
-//	    config.baudRate_Bps = 12000000U; // fast clock rate
-//	    SPI_MasterInit(SDCARD_SPI_BASE, &config, CLOCK_GetFroHfFreq());
-//	    SPI_Enable(SDCARD_SPI_BASE,1);
+		SPI_MasterSetBaud(SDCARD_SPI_BASE, 1000000U, CLOCK_GetFroHfFreq());
 
 		if(!cmd_reset_card()) {
 			return 0;
@@ -535,7 +547,7 @@ public:
 		if(!cmd_initialise_card()) {
 			return 0;
 		}
-		if(!cmd_set_block_size(SD_BLOCK_SIZE)) {
+		if(!cmd_set_block_size(SZ_DBLK)) {
 			return 0;
 		}
 		if(!cmd_read_ocr()) {
@@ -544,10 +556,10 @@ public:
 		m_lba_mode = !!(m_response & OCR_HIGH_CAPACITY);
 
 
-		byte block[512] = {0};
-		for(int i=0; i<(int)sizeof(block); ++i) {
-			block[i]=(byte)i;
-		}
+		//byte block[512] = {0};
+		//for(int i=0; i<(int)sizeof(block); ++i) {
+			//block[i]=(byte)i;
+		//}
 		//send_data(1024, block);
 		//read_data(1024, block);
 		return 1;
@@ -558,7 +570,6 @@ public:
 		SPI_Deinit(SDCARD_SPI_BASE);
 	    power_sd_card(0);
 	}
-
 
 };
 

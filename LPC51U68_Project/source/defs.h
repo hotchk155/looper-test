@@ -7,6 +7,15 @@ enum {
 	SZ_DBLK = 512
 };
 
+typedef enum {
+	EV_NONE,
+	EV_LOOPER_CLEAR,
+	EV_LOOPER_RECORD,
+	EV_LOOPER_STOP,
+	EV_LOOPER_PLAY,
+	EV_LOOPER_OVERDUB
+} EV_TYPE;
+
 typedef struct { byte data[SZ_DBLK]; } DBLK;
 
 

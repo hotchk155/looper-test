@@ -14,9 +14,9 @@
 #include "defs.h"
 #include "clock.h"
 #include "sinewave.h"
-#include "sdcard.h"
-#include "looper.h"
+#include "block_buffer.h"
 #include "audioio.h"
+#include "sdcard.h"
 
 int main(void) {
 
