@@ -4,9 +4,14 @@
 #define SDCARD_H_
 
 #define SDCARD_SPI_BASE SPI2
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 class CSDCard {
 	enum {
-		STATUS_POLL_RETRIES = 2000
+		STATUS_POLL_RETRIES = 2000,
+		SD_BLOCK_SIZE		= 512,
+		SD_LOOP_BASE		= 1024
 	};
 	enum {
 		R1_IDLE				= 0x01,
@@ -65,11 +70,11 @@ class CSDCard {
 
 	};
 
+
 	typedef struct {
 		byte status;
-		DBLK data;
-		byte crc_hi;
-		byte crc_lo;
+		SD_BLOCK data;
+		uint16_t crc;
 	} SD_DATA_PACKET;
 
 	byte m_data_resp;
@@ -83,6 +88,36 @@ class CSDCard {
 	int m_retry;
 	status_t m_api_result;
 
+
+	IBlockBuffer *m_block_buffer;
+
+	SD_BLOCK_NO m_read_block;		// absolute block number on SD card where next playback block will be read from
+	SD_BLOCK_NO m_write_block;  	// absolute block number on SD card where next recorded/overdub block will be written
+	SD_BLOCK_NO m_loop_start;		// lowest numbered block for the loop
+	SD_BLOCK_NO m_loop_end;			// one block last last block for the loop
+	SD_BLOCK_NO m_loop_max;
+
+public:
+
+	inline void inc_block_no(SD_BLOCK_NO *block_no) {
+		++(*block_no);
+		if(m_loop_end && block_no >= m_loop_end) {
+			(*block_no) = m_loop_start;
+		}
+		if(++(*block_no) >= m_loop_end) {
+			(*block_no) = m_loop_begin;
+		}
+	}
+
+	void set_read_block_no(SD_BLOCK_NO block_no) {
+		m_read_block = block_no;
+	}
+	void set_write_block_no(SD_BLOCK_NO block_no) {
+		m_write_block = block_no;
+	}
+	SD_BLOCK_NO get_loop_start_block_no() {
+		return m_loop_start;
+	}
 
 
 
@@ -198,12 +233,22 @@ class CSDCard {
 		return result;
 	}
 
-public:
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	inline SD_ADDR block2addr(SD_BLOCK_NO block) {
+		return ((SD_ADDR)block)<<9; // * 512
+	}
+
 	CSDCard() {
 		m_status = 0;
 		m_response = 0;
 		m_data_resp = 0;
 		m_lba_mode = 0;
+		m_block_buffer = nullptr;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	void set_block_buffer(IBlockBuffer *block_buffer) {
+		m_block_buffer = block_buffer;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -283,19 +328,20 @@ public:
 	}
 */
 
-
+/*
 	byte check_for_write_block() {
-		if(g_block_buffer.get_next_block_for_sd(&m_data_packet.data, &m_block_addr)) {
+		if(g_block_buffer.get_next_block_for_sd(m_data_packet.data)) {
 			m_data_packet.status = DATA_SINGLE_BLOCK;
 			m_data_packet.crc_hi = 0xFF;
 			m_data_packet.crc_lo = 0xFF;
 			return 1;
 		}
 		return 0;
-	}
-	byte check_for_read_block() {
-		return g_block_buffer.get_next_block_from_sd(&m_block_addr);
-	}
+	}*/
+//	byte check_for_read_block() {
+	//	return g_block_buffer.get_next_block_from_sd(&m_block_addr);
+	//}
+
 
 
 
@@ -324,17 +370,17 @@ public:
 		switch(m_state) {
 		////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_READY:
-			if(check_for_read_block()) {
+			if(!m_block_buffer->is_buffer_full()) {
 				m_state = ST_READ0;
 			}
-			else if(check_for_write_block()) {
+			else if(m_block_buffer->get_sd_block(&m_data_packet.data)) {
 				m_state = ST_WRITE0;
 			}
 			break;
 		////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// Start a new write
 		case ST_WRITE0: // Send the CMD24
-			sd_addr = block2addr(m_block_addr);
+			sd_addr = block2addr(m_write_block); // TODO no incrememnt if write error
 			csel(0);
 			m_cmd_buf[0] = CMD24;
 			m_cmd_buf[1] = (byte)(sd_addr>>24);
@@ -376,6 +422,8 @@ public:
 			break;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_WRITE3: // data packet
+			m_data_packet.status = DATA_SINGLE_BLOCK;
+			m_data_packet.crc = 0xFFFF;
 			if(!sd_tx((byte*)&m_data_packet, sizeof(m_data_packet))) {
 				m_state = ST_FATAL;
 			}
@@ -391,11 +439,10 @@ public:
 			else if(m_status == 0xFF) { // ready for next
 
 				csel(1); // de-assert CSEL
-
-				if(check_for_write_block()) {
+				if(m_block_buffer->get_sd_block(&m_data_packet.data)) {
 					m_state = ST_WRITE0;
 				}
-				else if(check_for_read_block()) {
+				else if(!m_block_buffer->is_buffer_full()) {
 					m_state = ST_READ0;
 				}
 				else {
@@ -408,7 +455,7 @@ public:
 		case ST_READ0:
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 			csel(0);
-			sd_addr = block2addr(m_block_addr);
+			sd_addr = block2addr(m_read_block);
 			m_cmd_buf[0] = CMD17;
 			m_cmd_buf[1] = (byte)(sd_addr>>24);
 			m_cmd_buf[2] = (byte)(sd_addr>>16);
@@ -460,17 +507,17 @@ public:
 			break;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_READ3:
-			if(!sd_rx(&m_data_packet[1], sizeof(m_data_packet) - 1)) {
+			if(!sd_rx(&((byte*)&m_data_packet)[1], sizeof(m_data_packet) - 1)) {
 				m_state = ST_FATAL;
 			}
 			else {
 				csel(1); // de-assert CSEL
 
-				g_block_buffer.put_block_from_sd(&m_data_packet.data);
-				if(check_for_read_block()) {
+				m_block_buffer->put_sd_block(&m_data_packet.data);
+				if(!m_block_buffer->is_buffer_full()) {
 					m_state = ST_READ0;
 				}
-				else if(check_for_write_block()) {
+				else if(m_block_buffer->get_sd_block(&m_data_packet.data)) {
 					m_state = ST_WRITE0;
 				}
 				else {
@@ -547,7 +594,7 @@ public:
 		if(!cmd_initialise_card()) {
 			return 0;
 		}
-		if(!cmd_set_block_size(SZ_DBLK)) {
+		if(!cmd_set_block_size(SD_BLOCK_SIZE)) {
 			return 0;
 		}
 		if(!cmd_read_ocr()) {
@@ -572,6 +619,6 @@ public:
 	}
 
 };
-
+CSDCard g_sd_card;
 
 #endif /* SDCARD_H_ */

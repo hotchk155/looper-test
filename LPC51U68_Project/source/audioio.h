@@ -26,7 +26,7 @@ extern "C" void I2SDMARxCallback(I2S_Type *base, i2s_dma_handle_t *handle, statu
 class CAudioIO {
 
 	enum {
-		SZ_DMA_BLOCK = (256 * 2 * 2) // 256 samples x 2 channels x 16 bits
+		SZ_DMA_SAMPLE_BLOCK = (SZ_SAMPLE_BLOCK * 2) // need L + R channels for I2S
 	};
 
 	// API data
@@ -44,36 +44,36 @@ class CAudioIO {
 	// Each is large enough to contain the 256 x 16 bit samples in a single 512 data block
 	// from the looper, however for the I2S peripheral left and right channels are needed,
 	// so the data blocks are expanded when copied into these buffers
-	byte m_tx_buf0[SZ_DMA_BLOCK] __attribute__((aligned(4)));
-	byte m_tx_buf1[SZ_DMA_BLOCK] __attribute__((aligned(4)));
-	byte m_rx_buf0[SZ_DMA_BLOCK] __attribute__((aligned(4)));
-	byte m_rx_buf1[SZ_DMA_BLOCK] __attribute__((aligned(4)));
+	SAMPLE m_tx_buf0[SZ_DMA_SAMPLE_BLOCK] __attribute__((aligned(4)));
+	SAMPLE m_tx_buf1[SZ_DMA_SAMPLE_BLOCK] __attribute__((aligned(4)));
+	SAMPLE m_rx_buf0[SZ_DMA_SAMPLE_BLOCK] __attribute__((aligned(4)));
+	SAMPLE m_rx_buf1[SZ_DMA_SAMPLE_BLOCK] __attribute__((aligned(4)));
 
 	// flags record which ping-pong buffer is in use for audio out and in
 	byte m_tx_toggle;
 	byte m_rx_toggle;
 
+	IBlockBuffer *m_block_buffer;
+
 	//////////////////////////////////////////////////////////////////////////////////////
 	// double up the samples for stereo by duplicating data to both channels
-	inline void mono2stereo(DBLK *block, byte *dma_buf) {
-		int j = 0;
-		byte *data = block->data;
-		for(int i=0; i<512; i+=2) {
-			dma_buf[j++] = data[i];
-			dma_buf[j++] = data[i+1];
-			dma_buf[j++] = data[i];
-			dma_buf[j++] = data[i+1];
+	inline void mono2stereo(SAMPLE_BLOCK *block, SAMPLE *dma_buf) {
+		auto count = 0;
+		SAMPLE *data = block->data;
+		while(count++ < SZ_DMA_SAMPLE_BLOCK) {
+			*dma_buf++ = *data;
+			*dma_buf++ = *data++;
 		}
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////////
 	// shrink stereo to mono samples by losing one channel
-	inline void stereo2mono(byte *dma_buf, DBLK *block) {
-		int j = 0;
-		byte *data = block->data;
-		for(int i=0; i<SZ_DMA_BLOCK; i+=4) {
-			data[j++] = dma_buf[i];
-			data[j++] = dma_buf[i+1];
+	inline void stereo2mono(SAMPLE *dma_buf, SAMPLE_BLOCK *block) {
+		auto count = 0;
+		SAMPLE *data = block->data;
+		while(count++ < SZ_SAMPLE_BLOCK) {
+			*data++ = *dma_buf;
+			dma_buf+=2;
 		}
 	}
 
@@ -86,6 +86,10 @@ class CAudioIO {
 	}
 public:
 	CAudioIO() {
+		m_block_buffer = 0;
+	}
+	void set_block_buffer(IBlockBuffer *block_buffer) {
+		m_block_buffer = block_buffer;
 	}
 
 
@@ -99,10 +103,10 @@ public:
 		memset(m_tx_buf1, 0, sizeof m_tx_buf1);
 		memset(m_rx_buf0, 0, sizeof m_rx_buf0);
 		memset(m_rx_buf1, 0, sizeof m_rx_buf1);
-		m_tx_transfer0.data = m_tx_buf0;
-		m_tx_transfer1.data = m_tx_buf1;
-		m_rx_transfer0.data = m_rx_buf0;
-		m_rx_transfer1.data = m_rx_buf1;
+		m_tx_transfer0.data = (byte*)m_tx_buf0;
+		m_tx_transfer1.data = (byte*)m_tx_buf1;
+		m_rx_transfer0.data = (byte*)m_rx_buf0;
+		m_rx_transfer1.data = (byte*)m_rx_buf1;
 		m_tx_transfer0.dataSize = sizeof(m_tx_buf0);
 		m_tx_transfer1.dataSize = sizeof(m_tx_buf1);
 		m_rx_transfer0.dataSize = sizeof(m_rx_buf0);
@@ -173,20 +177,20 @@ public:
 	// called when transmit buffer has been sent by DMA
 	//TODO error checking
 	inline void tx_callback(I2S_Type *base, i2s_dma_handle_t *handle, status_t completionStatus, void *userData) {
-		DBLK block;
+		SAMPLE_BLOCK block;
 
 		// have we just finished playing buffer #1?
 		if(m_tx_toggle) {
 			// fill buffer #1 up with new audio and queue it again (if we fail to get more audio we'll keep
 			// playing the same buffer content again...)
-			if(g_block_buffer.get_audio_out(&block)) {
+			if(m_block_buffer->get_audio(&block)) {
 				mono2stereo(&block, m_tx_buf1);
 			}
 			I2S_TxTransferSendDMA(base, handle, m_tx_transfer1);
 		}
 		else {
 			// fill buffer #0 up with new audio and queue it again
-			if(g_block_buffer.get_audio_out(&block)) {
+			if(m_block_buffer->get_audio(&block)) {
 				mono2stereo(&block, m_tx_buf0);
 			}
 			I2S_TxTransferSendDMA(base, handle, m_tx_transfer0);
@@ -199,7 +203,7 @@ public:
 	// called when receive buffer has been filled by DMA
 //TODO error checking
 	inline void rx_callback(I2S_Type *base, i2s_dma_handle_t *handle, status_t completionStatus, void *userData) {
-		DBLK block;
+		SAMPLE_BLOCK block;
 
 		// are we filling buffer #1 ?
 		if(m_rx_toggle) {
@@ -216,7 +220,7 @@ public:
 		m_rx_toggle = !m_rx_toggle;
 
 		// throw the audio block over to the looper
-		g_block_buffer.handle_audio_in(&block);
+		m_block_buffer->put_audio(&block);
 	}
 
 };

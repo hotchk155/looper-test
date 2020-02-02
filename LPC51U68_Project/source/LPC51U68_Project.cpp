@@ -14,14 +14,17 @@
 #include "defs.h"
 #include "clock.h"
 #include "sinewave.h"
-#include "block_buffer.h"
 #include "audioio.h"
 #include "sdcard.h"
+#include "block_buffer.h"
 
 int main(void) {
 
 	BOARD_InitBootClocks();
     BOARD_InitPins();
+
+    g_sd_card.set_block_buffer(&g_block_buffer);
+    g_audioio.set_block_buffer(&g_block_buffer);
 
     g_clock.init();
 	g_audioio.init();
