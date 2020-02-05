@@ -60,7 +60,8 @@ class CBlockBuffer :
 
 	// this is the SD card block address corresponding to the buffered block in *m_cur_pos
 	SD_BLOCK_NO m_cur_sd_block;
-	SD_BLOCK_NO m_overdub_init_sd_block;
+
+	int m_c
 
 	// the index of the active channel (i.e. "take") within the SD card blocks
 	byte m_cur_chan;
@@ -102,6 +103,7 @@ public:
 
 		case ST_OVERDUB_INIT:
 			if(m_cur_sd_block == m_overdub_init_sd_block) {
+				// after one full cycle through the loop when overdubb
 				m_state = ST_OVERDUB;
 			}
 			// fall thru
