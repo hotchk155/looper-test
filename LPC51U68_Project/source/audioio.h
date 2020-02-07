@@ -1,7 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// AUDIO INTERFACE
-//
+// LOW LEVEL AUDIO INTERFACE
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifndef AUDIOIO_H_
@@ -10,6 +9,13 @@
 //
 // DEFINITIONS
 //
+
+class IAudioCallback {
+public:
+	virtual int get_audio_block(SAMPLE_BLOCK *block) = 0;
+	virtual int put_audio_block(SAMPLE_BLOCK *block) = 0;
+};
+
 #define I2S_TX_MODULE (I2S0)
 #define I2S_RX_MODULE (I2S1)
 #define I2S_DMA_MODULE (DMA0)
@@ -53,7 +59,7 @@ class CAudioIO {
 	byte m_tx_toggle;
 	byte m_rx_toggle;
 
-	IBlockBuffer *m_block_buffer;
+	IAudioCallback *m_callback;
 
 	//////////////////////////////////////////////////////////////////////////////////////
 	// double up the samples for stereo by duplicating data to both channels
@@ -86,10 +92,10 @@ class CAudioIO {
 	}
 public:
 	CAudioIO() {
-		m_block_buffer = 0;
+		m_callback = NULL;
 	}
-	void set_block_buffer(IBlockBuffer *block_buffer) {
-		m_block_buffer = block_buffer;
+	void set_callback(IAudioCallback *callback) {
+		m_callback = callback;
 	}
 
 
@@ -183,14 +189,14 @@ public:
 		if(m_tx_toggle) {
 			// fill buffer #1 up with new audio and queue it again (if we fail to get more audio we'll keep
 			// playing the same buffer content again...)
-			if(m_block_buffer->get_audio(&block)) {
+			if(m_callback->get_audio_block(&block)) {
 				mono2stereo(&block, m_tx_buf1);
 			}
 			I2S_TxTransferSendDMA(base, handle, m_tx_transfer1);
 		}
 		else {
 			// fill buffer #0 up with new audio and queue it again
-			if(m_block_buffer->get_audio(&block)) {
+			if(m_callback->get_audio_block(&block)) {
 				mono2stereo(&block, m_tx_buf0);
 			}
 			I2S_TxTransferSendDMA(base, handle, m_tx_transfer0);
@@ -220,7 +226,7 @@ public:
 		m_rx_toggle = !m_rx_toggle;
 
 		// throw the audio block over to the looper
-		m_block_buffer->put_audio(&block);
+		m_callback->put_audio_block(&block);
 	}
 
 };

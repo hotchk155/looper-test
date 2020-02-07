@@ -1,5 +1,8 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-// DRIVER FOR DIRECT ACCESS TO SD CARD
+//
+// LOW LEVEL DRIVER FOR DIRECT ACCESS TO SD CARD
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifndef SDCARD_H_
 #define SDCARD_H_
 
@@ -10,7 +13,7 @@
 class CSDCard {
 	enum {
 		STATUS_POLL_RETRIES = 2000,
-		SD_BLOCK_SIZE		= 512,
+		SAMPLE_BLOCK_SIZE		= 512,
 		SD_LOOP_BASE		= 1024
 	};
 	enum {
@@ -73,7 +76,7 @@ class CSDCard {
 
 	typedef struct {
 		byte status;
-		SD_BLOCK data;
+		SAMPLE_BLOCK data;
 		uint16_t crc;
 	} SD_DATA_PACKET;
 
@@ -88,18 +91,35 @@ class CSDCard {
 	int m_retry;
 	status_t m_api_result;
 
-
-	IBlockBuffer *m_block_buffer;
-
-	SD_BLOCK_NO m_read_block;		// absolute block number on SD card where next playback block will be read from
-	SD_BLOCK_NO m_write_block;  	// absolute block number on SD card where next recorded/overdub block will be written
-	SD_BLOCK_NO m_loop_start;		// lowest numbered block for the loop
-	SD_BLOCK_NO m_loop_end;			// one block last last block for the loop
-	SD_BLOCK_NO m_loop_max;
+	int m_read_block_ready;
+	SAMPLE_BLOCK m_read_block;
 
 public:
 
-	inline void inc_block_no(SD_BLOCK_NO *block_no) {
+
+
+	int is_busy() {
+		return 0;
+	}
+	int write_block(int block_no, SAMPLE_BLOCK *block) {
+		return 0;
+
+	}
+
+
+	int request_read_block(int block_no) {
+//TODO
+		return 0;
+	}
+
+	int read_block_ready(SAMPLE_BLOCK *block) {
+		if(m_read_block_ready) {
+			*block = m_read_block;
+			m_read_block_ready = 0;
+		}
+	}
+
+	inline void inc_block_no(SAMPLE_BLOCK_NO *block_no) {
 		++(*block_no);
 		if(m_loop_end && block_no >= m_loop_end) {
 			(*block_no) = m_loop_start;
@@ -109,13 +129,13 @@ public:
 		}
 	}
 
-	void set_read_block_no(SD_BLOCK_NO block_no) {
+	void set_read_block_no(SAMPLE_BLOCK_NO block_no) {
 		m_read_block = block_no;
 	}
-	void set_write_block_no(SD_BLOCK_NO block_no) {
+	void set_write_block_no(SAMPLE_BLOCK_NO block_no) {
 		m_write_block = block_no;
 	}
-	SD_BLOCK_NO get_loop_start_block_no() {
+	SAMPLE_BLOCK_NO get_loop_start_block_no() {
 		return m_loop_start;
 	}
 
@@ -234,7 +254,7 @@ public:
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	inline SD_ADDR block2addr(SD_BLOCK_NO block) {
+	inline SD_ADDR block2addr(SAMPLE_BLOCK_NO block) {
 		return ((SD_ADDR)block)<<9; // * 512
 	}
 
@@ -243,12 +263,6 @@ public:
 		m_response = 0;
 		m_data_resp = 0;
 		m_lba_mode = 0;
-		m_block_buffer = nullptr;
-	}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	void set_block_buffer(IBlockBuffer *block_buffer) {
-		m_block_buffer = block_buffer;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -370,12 +384,6 @@ public:
 		switch(m_state) {
 		////////////////////////////////////////////////////////////////////////////////////////////////////////
 		case ST_READY:
-			if(!m_block_buffer->is_buffer_full()) {
-				m_state = ST_READ0;
-			}
-			else if(m_block_buffer->get_sd_block(&m_data_packet.data)) {
-				m_state = ST_WRITE0;
-			}
 			break;
 		////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// Start a new write
@@ -439,15 +447,7 @@ public:
 			else if(m_status == 0xFF) { // ready for next
 
 				csel(1); // de-assert CSEL
-				if(m_block_buffer->get_sd_block(&m_data_packet.data)) {
-					m_state = ST_WRITE0;
-				}
-				else if(!m_block_buffer->is_buffer_full()) {
-					m_state = ST_READ0;
-				}
-				else {
-					m_state = ST_READY;
-				}
+				m_state = ST_READY;
 			}
 			break;
 
@@ -512,17 +512,7 @@ public:
 			}
 			else {
 				csel(1); // de-assert CSEL
-
-				m_block_buffer->put_sd_block(&m_data_packet.data);
-				if(!m_block_buffer->is_buffer_full()) {
-					m_state = ST_READ0;
-				}
-				else if(m_block_buffer->get_sd_block(&m_data_packet.data)) {
-					m_state = ST_WRITE0;
-				}
-				else {
-					m_state = ST_READY;
-				}
+				m_state = ST_READY;
 			}
 			break;
 
@@ -594,7 +584,7 @@ public:
 		if(!cmd_initialise_card()) {
 			return 0;
 		}
-		if(!cmd_set_block_size(SD_BLOCK_SIZE)) {
+		if(!cmd_set_block_size(SAMPLE_BLOCK_SIZE)) {
 			return 0;
 		}
 		if(!cmd_read_ocr()) {

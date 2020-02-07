@@ -17,17 +17,26 @@
 #include "audioio.h"
 #include "sdcard.h"
 #include "block_buffer.h"
+#include "recording.h"
+#include "looper.h"
+
+CClock g_clock;
+CRecording g_recording;
 
 int main(void) {
 
 	BOARD_InitBootClocks();
     BOARD_InitPins();
 
-    g_sd_card.set_block_buffer(&g_block_buffer);
-    g_audioio.set_block_buffer(&g_block_buffer);
 
     g_clock.init();
 	g_audioio.init();
+	g_looper.init();
+
+    g_audioio.set_callback(&g_looper);
+
+
+
 	g_audioio.start();
 	for(;;);
 }
