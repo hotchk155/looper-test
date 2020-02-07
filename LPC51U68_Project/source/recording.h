@@ -213,7 +213,7 @@ public:
 
 		// when SD card is idle, check for the next action to do. We toggle between "phases" of read
 		// ahead and write behind so that SD access can be optimised for multiple block operations
-		if(!g_sd_card.busy()) {
+		if(g_sd_card.is_ready()) {
 			// are we checking for write behind?
 			if(WRITE_BEHIND_PHASE == m_read_write_phase) {
 				if(!m_buf.get_rec_count()) {

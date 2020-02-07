@@ -14,8 +14,6 @@ typedef enum {
 
 // type to hold a single 16-bit audio sample
 typedef uint16_t SAMPLE;
-typedef uint32_t SD_BLOCK_NO;
-typedef uint32_t SD_ADDR;
 
 enum {// number of samples that we'll pass per block of audio
 	SZ_SAMPLE_BLOCK = 128,
