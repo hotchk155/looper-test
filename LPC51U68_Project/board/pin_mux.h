@@ -29,8 +29,17 @@ void BOARD_InitBootPins(void);
 #define MCLKIO_DIR_OUTPUT                                                  0x01u   /*!<@brief MCLK direction control.: The MCLK function is an output. */
 #define PIO010_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO010_FUNC_ALT1                                                   0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
+#define PIO02_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO02_FUNC_ALT0                                                    0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO02_MODE_INACTIVE                                                0x00u   /*!<@brief Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
+#define PIO030_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO030_FUNC_ALT0                                                   0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO030_MODE_INACTIVE                                               0x00u   /*!<@brief Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
 #define PIO031_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO031_FUNC_ALT0                                                   0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO03_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO03_FUNC_ALT0                                                    0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO03_MODE_INACTIVE                                                0x00u   /*!<@brief Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
 #define PIO05_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO05_FUNC_ALT1                                                    0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
 #define PIO06_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
@@ -43,16 +52,26 @@ void BOARD_InitBootPins(void);
 #define PIO09_FUNC_ALT1                                                    0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
 #define PIO114_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO114_FUNC_ALT0                                                   0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO116_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO116_FUNC_ALT2                                                   0x02u   /*!<@brief Selects pin function.: Alternative connection 2. */
 #define PIO117_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO117_FUNC_ALT4                                                   0x04u   /*!<@brief Selects pin function.: Alternative connection 4. */
+#define PIO12_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO12_FUNC_ALT0                                                    0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO12_MODE_PULL_DOWN                                               0x01u   /*!<@brief Selects function mode (on-chip pull-up/pull-down resistor control).: Pull-down. Pull-down resistor enabled. */
 #define PIO13_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO13_FUNC_ALT0                                                    0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO14_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO14_FUNC_ALT6                                                    0x06u   /*!<@brief Selects pin function.: Alternative connection 6. */
 #define PIO16_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO16_FUNC_ALT2                                                    0x02u   /*!<@brief Selects pin function.: Alternative connection 2. */
 #define PIO17_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO17_FUNC_ALT2                                                    0x02u   /*!<@brief Selects pin function.: Alternative connection 2. */
 #define PIO18_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO18_FUNC_ALT2                                                    0x02u   /*!<@brief Selects pin function.: Alternative connection 2. */
+#define PIO19_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO19_FUNC_ALT0                                                    0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
+#define PIO19_MODE_INACTIVE                                                0x00u   /*!<@brief Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
 
 /*! @name MCLK (number 10), MCLK */
 #define BOARD_INITPINS_MCLK_PORT                                              1U   /*!<@brief PORT device index: 1 */
@@ -72,6 +91,31 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_SD_CSEL_GPIO                                         GPIO   /*!<@brief GPIO device name: GPIO */
 #define BOARD_INITPINS_SD_CSEL_PORT                                           0U   /*!<@brief PORT device index: 0 */
 #define BOARD_INITPINS_SD_CSEL_PIN                                           31U   /*!<@brief PIO0 GPIO pin index: 31 */
+
+/*! @name PIO0_2 (number 36), UI_0_IO */
+#define BOARD_INITPINS_UI_0_IO_GPIO                                         GPIO   /*!<@brief GPIO device name: GPIO */
+#define BOARD_INITPINS_UI_0_IO_PORT                                           0U   /*!<@brief PORT device index: 0 */
+#define BOARD_INITPINS_UI_0_IO_PIN                                            2U   /*!<@brief PIO0 GPIO pin index: 2 */
+
+/*! @name PIO0_3 (number 37), UI_1_IO */
+#define BOARD_INITPINS_UI_1_IO_GPIO                                         GPIO   /*!<@brief GPIO device name: GPIO */
+#define BOARD_INITPINS_UI_1_IO_PORT                                           0U   /*!<@brief PORT device index: 0 */
+#define BOARD_INITPINS_UI_1_IO_PIN                                            3U   /*!<@brief PIO0 GPIO pin index: 3 */
+
+/*! @name PIO1_9 (number 29), UI_2_IO */
+#define BOARD_INITPINS_UI_2_IO_GPIO                                         GPIO   /*!<@brief GPIO device name: GPIO */
+#define BOARD_INITPINS_UI_2_IO_PORT                                           1U   /*!<@brief PORT device index: 1 */
+#define BOARD_INITPINS_UI_2_IO_PIN                                            9U   /*!<@brief PIO1 GPIO pin index: 9 */
+
+/*! @name PIO1_2 (number 16), UI_SW_READ */
+#define BOARD_INITPINS_UI_SW_READ_GPIO                                      GPIO   /*!<@brief GPIO device name: GPIO */
+#define BOARD_INITPINS_UI_SW_READ_PORT                                        1U   /*!<@brief PORT device index: 1 */
+#define BOARD_INITPINS_UI_SW_READ_PIN                                         2U   /*!<@brief PIO1 GPIO pin index: 2 */
+
+/*! @name PIO0_30 (number 12), UI_LED_SINK */
+#define BOARD_INITPINS_UI_LED_SINK_GPIO                                     GPIO   /*!<@brief GPIO device name: GPIO */
+#define BOARD_INITPINS_UI_LED_SINK_PORT                                       0U   /*!<@brief PORT device index: 0 */
+#define BOARD_INITPINS_UI_LED_SINK_PIN                                       30U   /*!<@brief PIO0 GPIO pin index: 30 */
 
 /*!
  * @brief Configures pin routing and optionally pin electrical features.

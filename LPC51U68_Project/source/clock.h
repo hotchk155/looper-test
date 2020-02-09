@@ -74,6 +74,7 @@ extern CClock g_clock;
 extern "C" void MRT0_IRQHandler(void){
     MRT_ClearStatusFlags(MRT0, kMRT_Channel_0, kMRT_TimerInterruptFlag);
     g_clock.tick_isr();
+    g_ui.tick_isr();
  }
 
 

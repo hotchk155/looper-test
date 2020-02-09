@@ -11,8 +11,11 @@
 #include "fsl_spi.h"
 #include "fsl_spi_dma.h"
 #include "fsl_mrt.h"
+#include "fsl_ctimer.h"
 #include "defs.h"
+#include "ui.h"
 #include "clock.h"
+#include "pwm.h"
 #include "sinewave.h"
 #include "audioio.h"
 #include "sdcard.h"
@@ -22,6 +25,14 @@
 
 CClock g_clock;
 CRecording g_recording;
+void on_key_event(int key, int value) {
+	switch(key) {
+	case CUI::KEY_0: g_ui.set_led(0, value? CUI::LED_DUTY_ON : CUI::LED_DUTY_OFF); break;
+	case CUI::KEY_1: g_ui.set_led(1, value? CUI::LED_DUTY_ON : CUI::LED_DUTY_OFF); break;
+	case CUI::KEY_2: g_ui.set_led(2, value? CUI::LED_DUTY_ON : CUI::LED_DUTY_OFF); break;
+	}
+
+}
 
 int main(void) {
 
@@ -32,13 +43,18 @@ int main(void) {
     g_clock.init();
 	g_audioio.init();
 	g_looper.init();
+	g_pwm.init();
 
     g_audioio.set_callback(&g_looper);
 
 
 
 	g_audioio.start();
-	for(;;);
+	g_pwm.set_duty_0(50);
+	g_pwm.set_duty_1(50);
+	for(;;) {
+		g_ui.run();
+	}
 }
 
 

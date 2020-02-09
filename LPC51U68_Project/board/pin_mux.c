@@ -17,6 +17,11 @@ pin_labels:
 - {pin_num: '10', pin_signal: PIO1_17/MCLK/UTICK_CAP3, label: MCLK, identifier: MCLK}
 - {pin_num: '57', pin_signal: PIO1_14/FC2_RXD_SDA_MOSI/SCT0_OUT7/FC7_TXD_SCL_MISO_WS, label: SD_POWER, identifier: SD_POWER}
 - {pin_num: '13', pin_signal: PIO0_31/FC2_CTS_SDA_SSEL0/CTIMER0_CAP3/CTIMER0_MAT3/ADC0_2, label: SD_CSEL, identifier: SD_CSEL}
+- {pin_num: '36', pin_signal: PIO0_2/FC0_CTS_SDA_SSEL0/FC2_SSEL3, label: UI_0_IO, identifier: UI_0_IO}
+- {pin_num: '37', pin_signal: PIO0_3/FC0_RTS_SCL_SSEL1/FC2_SSEL2/CTIMER1_MAT3, label: UI_1_IO, identifier: IO_1_IO;UI_1_IO}
+- {pin_num: '29', pin_signal: PIO1_9/FC3_RXD_SDA_MOSI/CTIMER0_CAP2/USB0_UP_LED, label: UI_2_IO, identifier: UI_2_UI;UI_2_IO}
+- {pin_num: '12', pin_signal: PIO0_30/FC1_TXD_SCL_MISO/SCT0_OUT3/CTIMER0_MAT2/CTIMER0_CAP2/ADC0_1, label: UI_LED_SINK, identifier: UI_SW_READ;UI_LED_SINK}
+- {pin_num: '16', pin_signal: PIO1_2/MCLK/FC7_SSEL3/SCT0_OUT5/FC5_SSEL3/FC4_RXD_SDA_MOSI/ADC0_5, label: UI_SW_READ, identifier: UI_LED_SRC;UI_LED_SINK;UI_SW_READ}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 
@@ -51,6 +56,15 @@ BOARD_InitPins:
   - {pin_num: '45', peripheral: FLEXCOMM2, signal: SCK, pin_signal: PIO0_10/FC2_SCK/SCT0_OUT3/CTIMER3_MAT0}
   - {pin_num: '57', peripheral: GPIO, signal: 'PIO1, 14', pin_signal: PIO1_14/FC2_RXD_SDA_MOSI/SCT0_OUT7/FC7_TXD_SCL_MISO_WS, direction: OUTPUT}
   - {pin_num: '13', peripheral: GPIO, signal: 'PIO0, 31', pin_signal: PIO0_31/FC2_CTS_SDA_SSEL0/CTIMER0_CAP3/CTIMER0_MAT3/ADC0_2, direction: OUTPUT, gpio_init_state: 'true'}
+  - {pin_num: '7', peripheral: CTIMER0, signal: 'MATCH, 0', pin_signal: PIO1_16/CTIMER0_MAT0/CTIMER0_CAP0/FC7_RTS_SCL_SSEL1}
+  - {pin_num: '18', peripheral: CTIMER0, signal: 'MATCH, 1', pin_signal: PIO1_4/FC7_RTS_SCL_SSEL1/SCT0_OUT7/FC3_TXD_SCL_MISO/CTIMER0_MAT1/ADC0_7}
+  - {pin_num: '36', peripheral: GPIO, signal: 'PIO0, 2', pin_signal: PIO0_2/FC0_CTS_SDA_SSEL0/FC2_SSEL3, direction: OUTPUT, mode: inactive}
+  - {pin_num: '37', peripheral: GPIO, signal: 'PIO0, 3', pin_signal: PIO0_3/FC0_RTS_SCL_SSEL1/FC2_SSEL2/CTIMER1_MAT3, identifier: UI_1_IO, direction: OUTPUT, mode: inactive}
+  - {pin_num: '29', peripheral: GPIO, signal: 'PIO1, 9', pin_signal: PIO1_9/FC3_RXD_SDA_MOSI/CTIMER0_CAP2/USB0_UP_LED, identifier: UI_2_IO, direction: OUTPUT, mode: inactive}
+  - {pin_num: '16', peripheral: GPIO, signal: 'PIO1, 2', pin_signal: PIO1_2/MCLK/FC7_SSEL3/SCT0_OUT5/FC5_SSEL3/FC4_RXD_SDA_MOSI/ADC0_5, identifier: UI_SW_READ, direction: INPUT,
+    mode: pullDown}
+  - {pin_num: '12', peripheral: GPIO, signal: 'PIO0, 30', pin_signal: PIO0_30/FC1_TXD_SCL_MISO/SCT0_OUT3/CTIMER0_MAT2/CTIMER0_CAP2/ADC0_1, identifier: UI_LED_SINK,
+    direction: OUTPUT, mode: inactive}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 
@@ -65,16 +79,41 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
   CLOCK_EnableClock(kCLOCK_Gpio0);                           /* Enables the clock for the GPIO0 port registers. 0 = Disable; 1 = Enable. */
   CLOCK_EnableClock(kCLOCK_Gpio1);                           /* Enables the clock for the GPIO1 port registers. 0 = Disable; 1 = Enable. */
 
+  gpio_pin_config_t UI_0_IO_io_config = {                    /* PORT0 PIN2 (number: 36) GPIO configuration structure */
+    .pinDirection = kGPIO_DigitalOutput,
+    .outputLogic = 0U
+  };
+  GPIO_PinInit(BOARD_INITPINS_UI_0_IO_GPIO, BOARD_INITPINS_UI_0_IO_PORT, BOARD_INITPINS_UI_0_IO_PIN, &UI_0_IO_io_config); /* Initialize GPIO functionality on pin PIO0_2 (number: 36) */
+  gpio_pin_config_t UI_1_IO_io_config = {                    /* PORT0 PIN3 (number: 37) GPIO configuration structure */
+    .pinDirection = kGPIO_DigitalOutput,
+    .outputLogic = 0U
+  };
+  GPIO_PinInit(BOARD_INITPINS_UI_1_IO_GPIO, BOARD_INITPINS_UI_1_IO_PORT, BOARD_INITPINS_UI_1_IO_PIN, &UI_1_IO_io_config); /* Initialize GPIO functionality on pin PIO0_3 (number: 37) */
+  gpio_pin_config_t UI_LED_SINK_io_config = {                /* PORT0 PIN30 (number: 12) GPIO configuration structure */
+    .pinDirection = kGPIO_DigitalOutput,
+    .outputLogic = 0U
+  };
+  GPIO_PinInit(BOARD_INITPINS_UI_LED_SINK_GPIO, BOARD_INITPINS_UI_LED_SINK_PORT, BOARD_INITPINS_UI_LED_SINK_PIN, &UI_LED_SINK_io_config); /* Initialize GPIO functionality on pin PIO0_30 (number: 12) */
   gpio_pin_config_t SD_CSEL_io_config = {                    /* PORT0 PIN31 (number: 13) GPIO configuration structure */
     .pinDirection = kGPIO_DigitalOutput,
     .outputLogic = 1U
   };
   GPIO_PinInit(BOARD_INITPINS_SD_CSEL_GPIO, BOARD_INITPINS_SD_CSEL_PORT, BOARD_INITPINS_SD_CSEL_PIN, &SD_CSEL_io_config); /* Initialize GPIO functionality on pin PIO0_31 (number: 13) */
+  gpio_pin_config_t UI_SW_READ_io_config = {                 /* PORT1 PIN2 (number: 16) GPIO configuration structure */
+    .pinDirection = kGPIO_DigitalInput,
+    .outputLogic = 0U
+  };
+  GPIO_PinInit(BOARD_INITPINS_UI_SW_READ_GPIO, BOARD_INITPINS_UI_SW_READ_PORT, BOARD_INITPINS_UI_SW_READ_PIN, &UI_SW_READ_io_config); /* Initialize GPIO functionality on pin PIO1_2 (number: 16) */
   gpio_pin_config_t CODEC_RESET_io_config = {                /* PORT1 PIN3 (number: 17) GPIO configuration structure */
     .pinDirection = kGPIO_DigitalOutput,
     .outputLogic = 0U
   };
   GPIO_PinInit(BOARD_INITPINS_CODEC_RESET_GPIO, BOARD_INITPINS_CODEC_RESET_PORT, BOARD_INITPINS_CODEC_RESET_PIN, &CODEC_RESET_io_config); /* Initialize GPIO functionality on pin PIO1_3 (number: 17) */
+  gpio_pin_config_t UI_2_IO_io_config = {                    /* PORT1 PIN9 (number: 29) GPIO configuration structure */
+    .pinDirection = kGPIO_DigitalOutput,
+    .outputLogic = 0U
+  };
+  GPIO_PinInit(BOARD_INITPINS_UI_2_IO_GPIO, BOARD_INITPINS_UI_2_IO_PORT, BOARD_INITPINS_UI_2_IO_PIN, &UI_2_IO_io_config); /* Initialize GPIO functionality on pin PIO1_9 (number: 29) */
   gpio_pin_config_t SD_POWER_io_config = {                   /* PORT1 PIN14 (number: 57) GPIO configuration structure */
     .pinDirection = kGPIO_DigitalOutput,
     .outputLogic = 0U
@@ -85,6 +124,24 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
       | IOCON_PIO_FUNC(PIO010_FUNC_ALT1)                     /* Selects pin function.: PORT010 (pin 45) is configured as FC2_SCK */
       | IOCON_PIO_DIGIMODE(PIO010_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[0][2] = ((IOCON->PIO[0][2] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_MODE_MASK | IOCON_PIO_DIGIMODE_MASK))) /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO02_FUNC_ALT0)                      /* Selects pin function.: PORT02 (pin 36) is configured as PIO0_2 */
+      | IOCON_PIO_MODE(PIO02_MODE_INACTIVE)                  /* Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
+      | IOCON_PIO_DIGIMODE(PIO02_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[0][3] = ((IOCON->PIO[0][3] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_MODE_MASK | IOCON_PIO_DIGIMODE_MASK))) /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO03_FUNC_ALT0)                      /* Selects pin function.: PORT03 (pin 37) is configured as PIO0_3 */
+      | IOCON_PIO_MODE(PIO03_MODE_INACTIVE)                  /* Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
+      | IOCON_PIO_DIGIMODE(PIO03_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[0][30] = ((IOCON->PIO[0][30] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_MODE_MASK | IOCON_PIO_DIGIMODE_MASK))) /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO030_FUNC_ALT0)                     /* Selects pin function.: PORT030 (pin 12) is configured as PIO0_30 */
+      | IOCON_PIO_MODE(PIO030_MODE_INACTIVE)                 /* Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
+      | IOCON_PIO_DIGIMODE(PIO030_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
     );
   IOCON->PIO[0][31] = ((IOCON->PIO[0][31] &
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
@@ -121,15 +178,31 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
       | IOCON_PIO_FUNC(PIO114_FUNC_ALT0)                     /* Selects pin function.: PORT114 (pin 57) is configured as PIO1_14 */
       | IOCON_PIO_DIGIMODE(PIO114_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
     );
+  IOCON->PIO[1][16] = ((IOCON->PIO[1][16] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO116_FUNC_ALT2)                     /* Selects pin function.: PORT116 (pin 7) is configured as CTIMER0_MAT0 */
+      | IOCON_PIO_DIGIMODE(PIO116_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
+    );
   IOCON->PIO[1][17] = ((IOCON->PIO[1][17] &
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
       | IOCON_PIO_FUNC(PIO117_FUNC_ALT4)                     /* Selects pin function.: PORT117 (pin 10) is configured as MCLK */
       | IOCON_PIO_DIGIMODE(PIO117_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
     );
+  IOCON->PIO[1][2] = ((IOCON->PIO[1][2] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_MODE_MASK | IOCON_PIO_DIGIMODE_MASK))) /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO12_FUNC_ALT0)                      /* Selects pin function.: PORT12 (pin 16) is configured as PIO1_2 */
+      | IOCON_PIO_MODE(PIO12_MODE_PULL_DOWN)                 /* Selects function mode (on-chip pull-up/pull-down resistor control).: Pull-down. Pull-down resistor enabled. */
+      | IOCON_PIO_DIGIMODE(PIO12_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
   IOCON->PIO[1][3] = ((IOCON->PIO[1][3] &
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
       | IOCON_PIO_FUNC(PIO13_FUNC_ALT0)                      /* Selects pin function.: PORT13 (pin 17) is configured as PIO1_3 */
       | IOCON_PIO_DIGIMODE(PIO13_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[1][4] = ((IOCON->PIO[1][4] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO14_FUNC_ALT6)                      /* Selects pin function.: PORT14 (pin 18) is configured as CTIMER0_MAT1 */
+      | IOCON_PIO_DIGIMODE(PIO14_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
     );
   IOCON->PIO[1][6] = ((IOCON->PIO[1][6] &
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
@@ -145,6 +218,12 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
       | IOCON_PIO_FUNC(PIO18_FUNC_ALT2)                      /* Selects pin function.: PORT18 (pin 28) is configured as FC7_TXD_SCL_MISO_WS */
       | IOCON_PIO_DIGIMODE(PIO18_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[1][9] = ((IOCON->PIO[1][9] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_MODE_MASK | IOCON_PIO_DIGIMODE_MASK))) /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO19_FUNC_ALT0)                      /* Selects pin function.: PORT19 (pin 29) is configured as PIO1_9 */
+      | IOCON_PIO_MODE(PIO19_MODE_INACTIVE)                  /* Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
+      | IOCON_PIO_DIGIMODE(PIO19_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
     );
   SYSCON->MCLKIO = ((SYSCON->MCLKIO &
     (~(SYSCON_MCLKIO_DIR_MASK)))                             /* Mask bits to zero which are setting */

@@ -66,7 +66,7 @@ class CAudioIO {
 	inline void mono2stereo(SAMPLE_BLOCK *block, SAMPLE *dma_buf) {
 		auto count = 0;
 		SAMPLE *data = block->data;
-		while(count++ < SZ_DMA_SAMPLE_BLOCK) {
+		while(count++ < SZ_SAMPLE_BLOCK) {
 			*dma_buf++ = *data;
 			*dma_buf++ = *data++;
 		}
