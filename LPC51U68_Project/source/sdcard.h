@@ -8,13 +8,12 @@
 
 #define SDCARD_SPI_BASE SPI2
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 class CSDCard {
 	enum {
-		STATUS_POLL_RETRIES = 2000,
+		STATUS_POLL_RETRIES 	= 2000,
 		SAMPLE_BLOCK_SIZE		= 512,
-		SD_LOOP_BASE		= 1024
+		SD_LOOP_BASE			= 1024
 	};
 	enum {
 		R1_IDLE				= 0x01,
@@ -26,7 +25,8 @@ class CSDCard {
 		R1_PARAMETER_ERR	= 0x40,
 
 		R1_ERR_MASK			= 0x7E,
-
+	};
+	enum {
 		OCR_2V7_2V8			= (1U<<15),
 		OCR_2V8_2V9			= (1U<<16),
 		OCR_2V9_3V0			= (1U<<17),
@@ -38,17 +38,17 @@ class CSDCard {
 		OCR_3V5_3V6			= (1U<<23),
 		OCR_HIGH_CAPACITY	= (1U<<30),
 		OCR_POWER_STATUS	= (1U<<31),
-
+	};
+	enum {
 		DATA_SINGLE_BLOCK	= 0xFE,
 		DATA_MULTI_BLOCK	= 0xFC,
 		DATA_STOP_TRAN		= 0xFD,
-
-
+	};
+	enum {
 		DATA_RESP_MASK		= 0x1F,
 		DATA_RESP_OK		= 0x05,
 		DATA_RESP_ERR_CRC	= 0x0B,
 		DATA_RESP_ERR_WRITE	= 0x0D
-
 	};
 	enum {
 		CMD0	= 0x40, //0,	//None(0)	R1	No	GO_IDLE_STATE	Software reset.
@@ -73,7 +73,6 @@ class CSDCard {
 
 	enum {
 		ST_READY,
-
 		ST_WRITE_CMD,
 		ST_WRITE_CMD_RESP,
 		ST_WRITE_DATA_DELAY,
@@ -83,8 +82,6 @@ class CSDCard {
 		ST_WRITE_READY,
 		ST_WRITE_STOP_TRAN,
 		ST_WRITE_STOP_TRAN_WAIT,
-
-
 		ST_READ_CMD,
 		ST_READ_CMD_RESP,
 		ST_READ_DATA_TOKEN,
@@ -92,7 +89,6 @@ class CSDCard {
 		ST_READ_READY,
 		ST_READ_STOP_TRANSMISSION_WAIT,
 		ST_READ_STOP_TRANSMISSION,
-
 		ST_FATAL,
 		ST_STOP,
 	} m_state;
@@ -314,6 +310,7 @@ class CSDCard {
 	}
 
 public:
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	CSDCard() {
 		m_state = ST_READY;
 		m_status = 0;
@@ -323,6 +320,7 @@ public:
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Return nonzero if we are rea
 	inline int is_ready() {
 		return ((ST_READY == m_state && REQ_NONE == m_request) ||
 				(ST_WRITE_READY == m_state) ||
@@ -714,8 +712,6 @@ public:
 			break;
 		}
 	}
-
-
 };
 CSDCard g_sd_card;
 
