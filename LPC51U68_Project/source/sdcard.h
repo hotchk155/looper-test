@@ -10,10 +10,17 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 class CSDCard {
+protected:
 	enum {
 		STATUS_POLL_RETRIES 	= 2000,
 		SAMPLE_BLOCK_SIZE		= 512,
-		SD_LOOP_BASE			= 1024
+		SD_LOOP_BASE			= 1024,
+    	SLOW_SPI_CLOCK_BPS 		= 100000U,
+#if 0
+    	FAST_SPI_CLOCK_BPS 		= 1000000U
+#else
+    	FAST_SPI_CLOCK_BPS 		= 12000000U
+#endif
 	};
 	enum {
 		R1_IDLE				= 0x01,
@@ -40,9 +47,9 @@ class CSDCard {
 		OCR_POWER_STATUS	= (1U<<31),
 	};
 	enum {
-		DATA_SINGLE_BLOCK	= 0xFE,
-		DATA_MULTI_BLOCK	= 0xFC,
-		DATA_STOP_TRAN		= 0xFD,
+		DATA_TOKEN				= 0xFE,
+		DATA_TOKEN_MULTI_WRITE	= 0xFC,
+		DATA_STOP_TRAN			= 0xFD,
 	};
 	enum {
 		DATA_RESP_MASK		= 0x1F,
@@ -65,13 +72,15 @@ class CSDCard {
 		ACMD41  = 0x69 //41,
 	};
 
+#pragma pack(push,1)
 	typedef struct {
 		byte status;
 		SAMPLE_BLOCK data;
 		uint16_t crc;
 	} SD_DATA_PACKET;
+#pragma pack(pop)
 
-	enum {
+	typedef enum {
 		ST_READY,
 		ST_WRITE_CMD,
 		ST_WRITE_CMD_RESP,
@@ -91,7 +100,8 @@ class CSDCard {
 		ST_READ_STOP_TRANSMISSION,
 		ST_FATAL,
 		ST_STOP,
-	} m_state;
+	} STATE;
+	STATE m_state;
 
 	enum {
 		REQ_NONE,
@@ -101,8 +111,6 @@ class CSDCard {
 
 	int m_req_block_no; 	// the block number associated with pending request
 	int m_last_block_no;	// the block number associated with the last request
-
-
 
 	byte m_data_resp;
 	byte m_status;
@@ -129,7 +137,12 @@ class CSDCard {
 		xfer.txData = data;
 		xfer.rxData = NULL;
 		xfer.configFlags = 0U;
+		LOG2("+SPI_MasterTransferBlocking %ld\r\n", g_clock.millis());
 		m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+		LOG2("-SPI_MasterTransferBlocking %ld\r\n", g_clock.millis());
+		if(kStatus_Success != m_api_result) {
+			LOG2("**** sd_tx SPI_MasterTransferBlocking error %d\r\n", (int)m_api_result);
+		}
 		return (kStatus_Success == m_api_result);
 	}
 
@@ -140,6 +153,9 @@ class CSDCard {
 		xfer.rxData = data;
 		xfer.configFlags = 0U;
 		m_api_result = SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
+		if(kStatus_Success != m_api_result) {
+			LOG2("**** sd_rx SPI_MasterTransferBlocking error %d\r\n", (int)m_api_result);
+		}
 		return (kStatus_Success == m_api_result);
 	}
 
@@ -298,7 +314,7 @@ class CSDCard {
 			if(m_status != 0x01) {
 				return 0;
 			}
-			wait_ms();
+			g_clock.delay(1);
 		}
 		return 0;
 	}
@@ -312,11 +328,17 @@ class CSDCard {
 public:
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	CSDCard() {
-		m_state = ST_READY;
-		m_status = 0;
-		m_response = 0;
+
+		m_request = REQ_NONE;
+		m_req_block_no = 0;
+		m_last_block_no = 0;
 		m_data_resp = 0;
+		m_status = 0;
 		m_lba_mode = 0;
+		m_response = 0;
+		m_retry = 0;
+		m_api_result = 0;
+		m_read_block_ready = 0;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -336,14 +358,17 @@ public:
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	void request_read_block(int block_no) {
-		m_request = REQ_WRITE;
+		m_request = REQ_READ;
 		m_req_block_no = block_no;
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	int read_block_ready(SAMPLE_BLOCK *block) {
-		if(m_state == ST_READ_READY) {
-			*block = m_data_packet.data;
+		if(m_read_block_ready) {
+			m_read_block_ready = 0;
+			if(block) {
+				*block = m_data_packet.data;
+			}
 			return 1;
 		}
 		return 0;
@@ -355,19 +380,20 @@ public:
 
 		// power cycle the SD card
 		power_sd_card(0);
-	    mydelay(10000U);
+		g_clock.delay(100);
 	    power_sd_card(1);
-	    mydelay(100000U);
+		g_clock.delay(100);
 
 		spi_master_config_t config;
 		SPI_MasterGetDefaultConfig(&config);
 		config.polarity = kSPI_ClockPolarityActiveHigh;
 		config.phase = kSPI_ClockPhaseFirstEdge;
-	    config.baudRate_Bps              = 100000U; // slow clock rate
+	    config.baudRate_Bps = SLOW_SPI_CLOCK_BPS; // slow clock rate
 	    SPI_MasterInit(SDCARD_SPI_BASE, &config, CLOCK_GetFroHfFreq());
 	    SPI_Enable(SDCARD_SPI_BASE,1);
 
 	    SPI_SetDummyData(SDCARD_SPI_BASE,0xFF);
+
 
 		spi_transfer_t xfer;
 		byte data[10];
@@ -377,7 +403,7 @@ public:
 		xfer.configFlags = 0U;
 	    SPI_SetDummyData(SDCARD_SPI_BASE,0xFF);
 		SPI_MasterTransferBlocking(SDCARD_SPI_BASE, &xfer);
-		SPI_MasterSetBaud(SDCARD_SPI_BASE, 1000000U, CLOCK_GetFroHfFreq());
+		SPI_MasterSetBaud(SDCARD_SPI_BASE, FAST_SPI_CLOCK_BPS, CLOCK_GetFroHfFreq());
 
 		if(!cmd_reset_card()) {
 			return 0;
@@ -405,6 +431,40 @@ public:
 	    power_sd_card(0);
 	}
 
+	void PRINT_STATE(STATE state) {
+		switch(state) {
+		case ST_READY: LOG1("ST_READY"); break;
+		case ST_WRITE_CMD: LOG1("ST_WRITE_CMD"); break;
+		case ST_WRITE_CMD_RESP: LOG1("ST_WRITE_CMD_RESP"); break;
+		case ST_WRITE_DATA_DELAY: LOG1("ST_WRITE_DATA_DELAY"); break;
+		case ST_WRITE_DATA: LOG1("ST_WRITE_DATA"); break;
+		case ST_WRITE_DATA_RESP: LOG1("ST_WRITE_DATA_RESP"); break;
+		case ST_WRITE_UPDATE_PENDING: LOG1("ST_WRITE_UPDATE_PENDING"); break;
+		case ST_WRITE_READY: LOG1("ST_WRITE_READY"); break;
+		case ST_WRITE_STOP_TRAN: LOG1("ST_WRITE_STOP_TRAN"); break;
+		case ST_WRITE_STOP_TRAN_WAIT: LOG1("ST_WRITE_STOP_TRAN_WAIT"); break;
+		case ST_READ_CMD: LOG1("ST_READ_CMD"); break;
+		case ST_READ_CMD_RESP: LOG1("ST_READ_CMD_RESP"); break;
+		case ST_READ_DATA_TOKEN: LOG1("ST_READ_DATA_TOKEN"); break;
+		case ST_READ_DATA_PACKET: LOG1("ST_READ_DATA_PACKET"); break;
+		case ST_READ_READY: LOG1("ST_READ_READY"); break;
+		case ST_READ_STOP_TRANSMISSION_WAIT: LOG1("ST_READ_STOP_TRANSMISSION_WAIT"); break;
+		case ST_READ_STOP_TRANSMISSION: LOG1("ST_READ_STOP_TRANSMISSION"); break;
+		case ST_FATAL: LOG1("ST_FATAL"); break;
+		case ST_STOP: LOG1("ST_STOP"); break;
+		default: LOG2("[%d]", state); break;
+		}
+	}
+
+	inline void set_state(STATE state) {
+		LOG2("%ld ", g_clock.millis());
+		PRINT_STATE(m_state);
+		LOG1("->");
+		PRINT_STATE(state);
+		LOG1("\r\n");
+		m_state = state;
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Run the state machine that sequences access to the SD card
 	void run() {
@@ -417,11 +477,11 @@ public:
 			switch(m_request) {
 			case REQ_READ:
 				m_request = REQ_NONE;
-				m_state = ST_READ_CMD;
+				set_state(ST_READ_CMD);
 				break;
 			case REQ_WRITE:
 				m_request = REQ_NONE;
-				m_state = ST_WRITE_CMD;
+				set_state(ST_WRITE_CMD);
 				break;
 			case REQ_NONE:
 				break;
@@ -431,6 +491,8 @@ public:
 		////////////////////////////////////////////////////////////////////////////////////
 		// START A NEW MULTI BLOCK WRITE
 		case ST_WRITE_CMD:
+			LOG2("ST_WRITE_CMD %d\r\n", m_req_block_no);
+
 			csel(0); // assert chip select
 			sd_addr = block2addr(m_req_block_no);
 			m_cmd_buf[0] = CMD25;
@@ -440,11 +502,11 @@ public:
 			m_cmd_buf[4] = (byte)(sd_addr);
 			m_cmd_buf[5] = 0xFF;
 			if(!sd_tx(m_cmd_buf, 6)) {
-				m_state = ST_FATAL;
+				set_state(ST_FATAL);
 			}
 			else {
 				m_retry = 2000;
-				m_state = ST_WRITE_CMD_RESP;
+				set_state(ST_WRITE_CMD_RESP);
 			}
 			break;
 
@@ -452,19 +514,19 @@ public:
 		// WAIT FOR THE RESPONSE FOR THE WRITE COMMAND
 		case ST_WRITE_CMD_RESP:
 			if(!sd_rx(&m_status, 1)) {
-				m_state = ST_FATAL; // API failure
+				set_state(ST_FATAL); // API failure
 			}
 			else if(m_status == 0xFF) { // card busy
 				if(!--m_retry) {
-					m_state = ST_FATAL; // timeout
+					set_state(ST_FATAL); // timeout
 				}
 			}
 			else if(m_status == 0x00) { // expected response
-				m_retry = 2000;
-				m_state = ST_WRITE_DATA_DELAY;
+				m_retry = 10;
+				set_state(ST_WRITE_DATA_DELAY);
 			}
 			else { // invalid response
-				m_state = ST_FATAL;
+				set_state(ST_FATAL);
 			}
 			break;
 
@@ -472,21 +534,21 @@ public:
 		// FORCE A DELAY BEFORE WRITING THE DATA PACKET
 		case ST_WRITE_DATA_DELAY:
 			if(!--m_retry) {
-				m_state = ST_WRITE_DATA;
+				set_state(ST_WRITE_DATA);
 			}
 			break;
 
 		////////////////////////////////////////////////////////////////////////////////////
 		// SEND DATA PACKET
 		case ST_WRITE_DATA:
-			m_data_packet.status = DATA_MULTI_BLOCK;
+			m_data_packet.status = DATA_TOKEN_MULTI_WRITE;
 			m_data_packet.crc = 0xFFFF;
 			if(!sd_tx((byte*)&m_data_packet, sizeof(m_data_packet))) {
-				m_state = ST_FATAL;	// api error
+				set_state(ST_FATAL);	// api error
 			}
 			else {
 				m_retry = 2000;
-				m_state = ST_WRITE_DATA_RESP;
+				set_state(ST_WRITE_DATA_RESP);
 			}
 			break;
 
@@ -494,19 +556,20 @@ public:
 		// WAIT FOR RESPONSE BYTE
 		case ST_WRITE_DATA_RESP:
 			if(!sd_rx(&m_status, 1)) {
-				m_state = ST_FATAL;	// api error
+				set_state(ST_FATAL);	// api error
 			}
 			else if((m_status & DATA_RESP_MASK) == DATA_RESP_OK) { // expected response
 				m_retry = 10000;
-				m_state = ST_WRITE_UPDATE_PENDING;
+				set_state(ST_WRITE_UPDATE_PENDING);
 			}
 			else if(m_status == 0xFF) { // still busy
 				if(!--m_retry) {
-					m_state = ST_FATAL; // timeout
+					set_state(ST_FATAL); // timeout
 				}
 			}
 			else {
-				m_state = ST_FATAL; // bad response
+				LOG2("ST_WRITE_DATA_RESP received %d\r\n", m_status);
+				set_state(ST_FATAL); // bad response
 			}
 			break;
 
@@ -514,15 +577,16 @@ public:
 		// WAIT FOR THE SD CARD TO UPDATE
 		case ST_WRITE_UPDATE_PENDING:
 			if(!sd_rx((byte*)&m_status, 1)) {
-				m_state = ST_FATAL;	// api error
+				set_state(ST_FATAL);	// api error
 			}
 			else if(m_status == 0xFF) { // DO rises when update is complete
 				m_retry = 2000;
-				m_state = ST_WRITE_READY;
+				m_last_block_no = m_req_block_no;
+				set_state(ST_WRITE_READY);
 			}
 			else {
 				if(!--m_retry) {
-					m_state = ST_FATAL; // timeout
+					set_state(ST_FATAL); // timeout
 				}
 			}
 			break;
@@ -532,19 +596,21 @@ public:
 		case ST_WRITE_READY:
 			if((REQ_WRITE == m_request) && (m_req_block_no == m_last_block_no + 1)) {
 				// we can continue the write to another block
-				m_state = ST_WRITE_DATA_DELAY;
+				m_retry = 10;
+				m_request = REQ_NONE;
+				set_state(ST_WRITE_DATA_DELAY);
 			}
 			else if(REQ_NONE == m_request) {
 				// we won't hold the write transaction open indefinitely. If no further
 				// request is made we'll close the transaction by ourselves
 				if(!--m_retry) {
-					m_state = ST_WRITE_STOP_TRAN;
+					set_state(ST_WRITE_STOP_TRAN);
 				}
 			}
 			else {
 				// a request is pending but we can't add it to the open multi-block write
 				// request, so we'll need to close it before we can continue...
-				m_state = ST_WRITE_STOP_TRAN;
+				set_state(ST_WRITE_STOP_TRAN);
 			}
 			break;
 
@@ -554,11 +620,11 @@ public:
 			m_cmd_buf[0] = DATA_STOP_TRAN;
 			m_cmd_buf[1] = 0;
 			if(!sd_tx(m_cmd_buf, 2)) {
-				m_state = ST_FATAL; // api error
+				set_state(ST_FATAL); // api error
 			}
 			else {
 				m_retry = 10000;
-				m_state = ST_WRITE_STOP_TRAN_WAIT;
+				set_state(ST_WRITE_STOP_TRAN_WAIT);
 			}
 			break;
 
@@ -566,15 +632,15 @@ public:
 		// WAITING FOR SD CARD TO END THE WRITE AND SET DO HIGH
 		case ST_WRITE_STOP_TRAN_WAIT:
 			if(!sd_rx((byte*)&m_status, 1)) {
-				m_state = ST_FATAL;
+				set_state(ST_FATAL);
 			}
 			else if(m_status == 0xFF) {
 				csel(1); // de-assert CSEL
-				m_state = ST_READY;
+				set_state(ST_READY);
 			}
 			else {
 				if(!--m_retry) {
-					m_state = ST_FATAL; // timeout
+					set_state(ST_FATAL); // timeout
 				}
 			}
 			break;
@@ -582,6 +648,8 @@ public:
 		////////////////////////////////////////////////////////////////////////////////////
 		// START A MULTI BLOCK READ TRANSACTION
 		case ST_READ_CMD:
+			LOG2("ST_READ_CMD %d\r\n", m_req_block_no);
+
 			csel(0); // assert csel
 			sd_addr = block2addr(m_req_block_no);
 			m_cmd_buf[0] = CMD18;
@@ -591,30 +659,30 @@ public:
 			m_cmd_buf[4] = (byte)(sd_addr);
 			m_cmd_buf[5] = 0xFF;
 			if(!sd_tx((byte*)&m_cmd_buf, 6)) {
-				m_state = ST_FATAL;	// api error
+				set_state(ST_FATAL);	// api error
 			}
 			else {
 				m_retry = 2000;
-				m_state = ST_READ_CMD_RESP;
+				set_state(ST_READ_CMD_RESP);
 			}
 			break;
 		////////////////////////////////////////////////////////////////////////////////////
 		// GET COMMAND RESPONSE FOR MULTI BLOCK READ
 		case ST_READ_CMD_RESP:
 			if(!sd_rx((byte*)&m_status, 1)) {
-				m_state = ST_FATAL; // api error
+				set_state(ST_FATAL); // api error
 			}
 			else if(m_status == 0xFF) {
 				if(!--m_retry) {
-					m_state = ST_FATAL; // timeout
+					set_state(ST_FATAL); // timeout
 				}
 			}
 			else if(m_status != 0x00) {
-				m_state = ST_FATAL; // unexpected response
+				set_state(ST_FATAL); // unexpected response
 			}
 			else {
 				m_retry = 2000;
-				m_state = ST_READ_DATA_TOKEN;
+				set_state(ST_READ_DATA_TOKEN);
 			}
 			break;
 
@@ -622,18 +690,19 @@ public:
 		// READ THE DATA TOKEN AT START OF DATA PACKET
 		case ST_READ_DATA_TOKEN:
 			if(!sd_rx(&m_data_packet.status, 1)) {
-				m_state = ST_FATAL;
+				set_state(ST_FATAL);
 			}
 			else if(m_data_packet.status == 0xFF) {
 				if(!--m_retry) {
-					m_state = ST_FATAL; // timeout
+					set_state(ST_FATAL); // timeout
 				}
 			}
-			else if(m_data_packet.status == DATA_MULTI_BLOCK) { // the expected response
-				m_state = ST_READ_DATA_PACKET;
+			else if(m_data_packet.status == DATA_TOKEN) { // the expected response
+				set_state(ST_READ_DATA_PACKET);
 			}
 			else {
-				m_state = ST_FATAL;
+				LOG2("ST_READ_DATA_TOKEN received %d\r\n", m_data_packet.status);
+				set_state(ST_FATAL);
 			}
 			break;
 
@@ -641,10 +710,13 @@ public:
 		// READ THE REMAINDER OF THE DATA PACKET
 		case ST_READ_DATA_PACKET:
 			if(!sd_rx(&((byte*)&m_data_packet)[1], sizeof(m_data_packet) - 1)) {
-				m_state = ST_FATAL; // API error
+				set_state(ST_FATAL); // API error
 			}
 			else {
-				m_state = ST_READ_READY;
+				m_retry = 2000;
+				set_state(ST_READ_READY);
+				m_last_block_no = m_req_block_no;
+				m_read_block_ready = 1;
 			}
 			break;
 
@@ -653,19 +725,20 @@ public:
 		case ST_READ_READY:
 			if((REQ_READ == m_request) && (m_req_block_no == m_last_block_no + 1)) {
 				// we can continue the write to another block
-				m_state = ST_READ_DATA_TOKEN;
+				set_state(ST_READ_DATA_TOKEN);
+				m_request = REQ_NONE;
 			}
 			else if(REQ_NONE == m_request) {
 				// we won't hold the read transaction open indefinitely. If no further
 				// request is made we'll close the transaction by ourselves
 				if(!--m_retry) {
-					m_state = ST_READ_STOP_TRANSMISSION;
+					set_state(ST_READ_STOP_TRANSMISSION);
 				}
 			}
 			else {
 				// a request is pending but we can't add it to the open multi-block read
 				// request, so we'll need to close it before we can continue...
-				m_state = ST_READ_STOP_TRANSMISSION;
+				set_state(ST_READ_STOP_TRANSMISSION);
 			}
 			break;
 
@@ -679,13 +752,13 @@ public:
 			m_cmd_buf[4] = 0;
 			m_cmd_buf[5] = 0xFF;
 			if(!sd_tx((byte*)&m_cmd_buf, 6)) {
-				m_state = ST_FATAL;	// api error
+				set_state(ST_FATAL);	// api error
 			}
 			else if(!sd_rx(m_junk_buf, 8)) {
-				m_state = ST_FATAL; // api error
+				set_state(ST_FATAL); // api error
 			}
 			else {
-				m_state = ST_READ_STOP_TRANSMISSION_WAIT;
+				set_state(ST_READ_STOP_TRANSMISSION_WAIT);
 			}
 			break;
 
@@ -693,18 +766,18 @@ public:
 		// WAIT FOR CARD TO BE READY AGAIN AFTER STOPPING READ TRANSMISSION
 		case ST_READ_STOP_TRANSMISSION_WAIT:
 			if(!sd_rx((byte*)&m_status, 1)) {
-				m_state = ST_FATAL; // api error
+				set_state(ST_FATAL); // api error
 			}
 			else if(0xFF == m_status) {
 				csel(1); // de-assert CSEL
-				m_state = ST_READY;
+				set_state(ST_READY);
 			}
 			break;
 
 			////////////////////////////////////////////////////////////////////////////////////
 		case ST_FATAL:
 			csel(1); // de-assert CSEL
-			m_state = ST_STOP;
+			set_state(ST_STOP);
 			break;
 
 		////////////////////////////////////////////////////////////////////////////////////
@@ -713,6 +786,7 @@ public:
 		}
 	}
 };
-CSDCard g_sd_card;
+
+//CSDCard g_sd_card;
 
 #endif /* SDCARD_H_ */

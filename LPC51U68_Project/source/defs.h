@@ -1,6 +1,14 @@
 #ifndef _DEFS_H_
 #define _DEFS_H_
 
+#if 0
+#define LOG1(a) PRINTF(a)
+#define LOG2(a,b) PRINTF(a,b)
+#else
+#define LOG1(a)
+#define LOG2(a,b)
+#endif
+
 #if defined(__GNUC__) /* GNU Compiler */
 #ifndef __ALIGN_END
 #define __ALIGN_END __attribute__((aligned(4)))

@@ -11,7 +11,7 @@
 
 class CRecording {
 
-
+protected:
 	// various constants
 	enum {
 		NUM_TRACKS 			= 2,
@@ -116,10 +116,8 @@ public:
 	}
 
 
-
 	void init() {
-		m_buf.clear_play_buffer();
-		m_buf.clear_rec_buffer();
+		clear_sd_buffers();
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -149,10 +147,15 @@ public:
 		m_rec.loop_len = 0;
 	}
 
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void stop_or_reset_playback() {
+	void clear_sd_buffers() {
 		m_buf.clear_play_buffer();
 		m_buf.clear_rec_buffer();
+		g_sd_card.read_block_ready(NULL);
+
+	}
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	void stop_or_reset_playback() {
+		clear_sd_buffers();
 
 		m_cur_block_no = 0;
 		m_read_ahead_block_no = 0;
@@ -196,6 +199,10 @@ public:
 
 		SAMPLE_BLOCK block;
 
+		g_pwm.set_duty_0(100 * m_buf.get_play_count()/m_buf.len());
+		g_pwm.set_duty_1(100 * m_buf.get_rec_count()/m_buf.len());
+
+
 		// check if the SD card has a block of data ready for us
 		if(g_sd_card.read_block_ready(&block)) {
 			// do we want it?
@@ -228,7 +235,9 @@ public:
 					if(m_cycle_status != CYCLE_ALL_UNCHANGED) {
 						// otherwise write the block to SD card
 						int block_no = m_track[m_write_behind_track_id].start_block + m_write_behind_block_no;
+#if 0
 						g_sd_card.write_block(block_no, &block);
+#endif
 					}
 					// increment the write block location on SD card
 					if(++m_write_behind_block_no >= m_rec.loop_len) {
@@ -239,7 +248,7 @@ public:
 				}
 			}
 			// we'll be reading from the card, up to the maximum number of blocks to read ahead
-			else if(m_is_read_ahead && m_buf.get_play_count() < MAX_READ_AHEAD) {
+			else if(m_is_read_ahead && !m_buf.is_full() && m_buf.get_play_count() < MAX_READ_AHEAD) {
 				// request a block from the card.. this is an asynchronous operation
 				int block_no = m_track[m_read_ahead_track_id].start_block + m_read_ahead_block_no;
 				g_sd_card.request_read_block(block_no);
@@ -271,10 +280,7 @@ public:
 				// track two loop cycles without any overdubs.. at this point both tracks
 				// have identical content so no need to do real write behind to SD card as
 				// data has not changed
-				if(m_is_overdubbing) {
-					m_cycle_status = CYCLE_DIRTY_PASS;
-				}
-				else if(CYCLE_CLEAN_PASS == m_cycle_status) {
+				if(CYCLE_CLEAN_PASS == m_cycle_status) {
 					m_cycle_status = CYCLE_ALL_UNCHANGED;
 				}
 				else {
@@ -285,8 +291,6 @@ public:
 		// no loop length, so make sure that we don't exceed the allowable loop size
 		else if(m_cur_block_no < TRACK_SIZE_BLOCKS - 1) {
 			++m_cur_block_no;
-			// initial loop record, so data us always being changed
-			m_cycle_status = CYCLE_DIRTY_PASS;
 		}
 		else {
 			// no more space for loop!
@@ -300,11 +304,35 @@ public:
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	inline int put_audio(SAMPLE_BLOCK *block) {
+	inline int put_audio(SAMPLE_BLOCK *block, int is_new) {
+		m_cycle_status = CYCLE_DIRTY_PASS;
 		return m_buf.push_rec_block(block);
 	}
 
+};
+
+class CRecordingTest: public CRecording {
+public:
+	void set_loop_len(int len) {
+		m_rec.loop_len = len;
+	}
+
+	void test1() {
+		// set up two tracks worth of
+		set_loop_len(4);
+		clear_sd_buffers();
+		m_buf.push_rec_block((SAMPLE_BLOCK*)&sine::quad0);
+		m_buf.push_rec_block((SAMPLE_BLOCK*)&sine::quad1);
+		m_buf.push_rec_block((SAMPLE_BLOCK*)&sine::quad2);
+		m_buf.push_rec_block((SAMPLE_BLOCK*)&sine::quad3);
+		m_buf.push_rec_block((SAMPLE_BLOCK*)&sine::quad0);
+		m_buf.push_rec_block((SAMPLE_BLOCK*)&sine::quad1);
+		m_buf.push_rec_block((SAMPLE_BLOCK*)&sine::quad2);
+		m_buf.push_rec_block((SAMPLE_BLOCK*)&sine::quad3);
+	}
+
+
 
 };
-extern CRecording g_recording;
+CRecordingTest g_recording;
 #endif /* RECORDING_H_ */

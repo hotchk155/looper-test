@@ -3,8 +3,7 @@
 #ifndef LOOPER_H_
 #define LOOPER_H_
 
-class CLooper:
-	public IAudioCallback {
+class CLooper: public IAudioCallback {
 public:
 	typedef enum {
 		ST_UNKNOWN,
@@ -14,7 +13,7 @@ public:
 		ST_PLAY,
 		ST_OVERDUB
 	} STATE;
-private:
+protected:
 	SAMPLE_BLOCK m_last_play_block;
 	STATE m_state;
 public:
@@ -57,7 +56,6 @@ public:
 				return 0;
 			}
 			g_recording.advance_cur_block_no();
-			m_last_play_block = *block;
 			break;
 		case ST_INIT_REC:
 			g_recording.advance_cur_block_no();
@@ -66,6 +64,7 @@ public:
 			memset(block, 0, sizeof(block));
 			break;
 		}
+		m_last_play_block = *block;
 		return 1;
 	}
 	////////////////////////////////////////////////////////////////////
@@ -74,22 +73,30 @@ public:
 	int put_audio_block(SAMPLE_BLOCK *block) {
 		switch(m_state) {
 		case ST_INIT_REC:
-			return g_recording.put_audio(block);
+			// while making the initial recording, the input audio is
+			// written directly to the record track
+			return g_recording.put_audio(block, 1);
+		case ST_PLAY:
+			// while playing, the last played block is written back to
+			// the record track, bringing it up to date.
+			return g_recording.put_audio((SAMPLE_BLOCK*)&m_last_play_block, 0);
 		case ST_OVERDUB:
+			// while overdubbing, the last played block is mixed with the
+			// incoming audio and written back to the record track
 			mix_audio(block, &m_last_play_block);
-			return g_recording.put_audio(block);
+			return g_recording.put_audio(block, 1);
 		default:
 			return 0;
 		}
 	}
 
+	////////////////////////////////////////////////////////////////////
 	void run() {
 		switch(m_state) {
 		case ST_UNKNOWN:
 			// at startup need to determine if a loop exists on the SD card
 			m_state = g_recording.is_loop_set() ? ST_STOPPED : ST_EMPTY;
 			break;
-		case ST_EMPTY:
 		case ST_INIT_REC:
 			if(g_recording.is_loop_overflow()) {
 				g_recording.close_initial_rec();
@@ -97,6 +104,7 @@ public:
 				m_state = ST_STOPPED;
 			}
 			break;
+		case ST_EMPTY:
 		case ST_STOPPED:
 		case ST_PLAY:
 		case ST_OVERDUB:
@@ -205,7 +213,30 @@ public:
 	}
 
 };
-CLooper g_looper;
+
+class CLooperTest: public CLooper {
+public:
+	/*
+	int get_audio_block(SAMPLE_BLOCK *block) {
+		static int q = 0;
+		switch(q) {
+		case 0: *block = sine::quad0; break;
+		case 1: *block = sine::quad1; break;
+		case 2: *block = sine::quad2; break;
+		case 3: *block = sine::quad3; break;
+		}
+		if(++q>3) q=0;
+		return 1;
+	}*/
+	void run_till_state_change() {
+		int s = m_state;
+		while(m_state == s) {
+			run();
+		}
+	}
+};
+
+CLooperTest g_looper;
 
 
 #endif /* LOOPER_H_ */

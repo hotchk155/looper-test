@@ -6,6 +6,7 @@
 #ifndef AUDIOIO_H_
 #define AUDIOIO_H_
 
+#define DUMMY_AUDIO_INPUT 1
 //
 // DEFINITIONS
 //

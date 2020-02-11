@@ -4,6 +4,7 @@
 #include "board.h"
 #include "pin_mux.h"
 #include "clock_config.h"
+#include "fsl_debug_console.h"
 #include "fsl_crc.h"
 #include "fsl_gpio.h"
 #include "fsl_i2s.h"
@@ -19,12 +20,15 @@
 #include "sinewave.h"
 #include "audioio.h"
 #include "sdcard.h"
+#include "test/sdcardtester.h"
 #include "block_buffer.h"
 #include "recording.h"
 #include "looper.h"
 
+
+
 CClock g_clock;
-CRecording g_recording;
+//CRecording g_recording;
 void on_key_event(int key, int value) {
 	switch(key) {
 	case CUI::KEY_0: g_ui.set_led(0, value? CUI::LED_DUTY_ON : CUI::LED_DUTY_OFF); break;
@@ -41,19 +45,43 @@ int main(void) {
 
 
     g_clock.init();
-	g_audioio.init();
+
+
+    //TEST
+    //g_sd_card.init();
+    //g_sd_card.test2();
+    //for(;;);
+    //
+
 	g_looper.init();
 	g_pwm.init();
-
-    g_audioio.set_callback(&g_looper);
-
-
-
-	g_audioio.start();
 	g_pwm.set_duty_0(50);
 	g_pwm.set_duty_1(50);
+
+    g_recording.init();
+
+    g_audioio.set_callback(&g_looper);
+	g_audioio.init();
+	g_audioio.start();
+
+    g_sd_card.init();
+    //g_sd_card.test1(); while(1);
+
+
+    //g_recording.test1();
+    //while(1) g_recording.run();
+
+
+    g_recording.set_loop_len(4);
+    g_looper.run_till_state_change();
+    g_looper.on_play_stop_button();
+
+
+    int state = 0;
 	for(;;) {
-		g_ui.run();
+		g_looper.run();
+		g_recording.run();
+		g_sd_card.run();
 	}
 }
 

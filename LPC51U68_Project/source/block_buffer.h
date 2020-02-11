@@ -12,6 +12,9 @@ __DATA(SRAM0) SAMPLE_BLOCK g_buffer[SZ_BLOCK_BUFFER]; // the big buffer for the 
 class CBlockBuffer
 {
 
+	enum {
+		MAX_BUF_LEN = SZ_BLOCK_BUFFER - 1
+	};
 	SAMPLE_BLOCK *m_play_tail;
 	SAMPLE_BLOCK *m_play_head;
 	SAMPLE_BLOCK *m_rec_tail;
@@ -24,10 +27,17 @@ class CBlockBuffer
 
 	///////////////////////////////////////////////////////////////////////////
 	inline SAMPLE_BLOCK *inc_ptr(SAMPLE_BLOCK *ptr) {
-		if(++ptr>=m_end) {
+		if(ptr == m_end - 1) {
 			ptr = m_begin;
 		}
-		return ptr;
+		return ptr + 1;
+	}
+	///////////////////////////////////////////////////////////////////////////
+	inline SAMPLE_BLOCK *dec_ptr(SAMPLE_BLOCK *ptr) {
+		if(ptr ==  m_begin) {
+			ptr = m_end;
+		}
+		return ptr - 1;
 	}
 
 public:
@@ -41,22 +51,50 @@ public:
 		m_play_count = 0;
 	}
 
+	int len() {
+		return SZ_BLOCK_BUFFER;
+	}
+
+	// ......................... empty buffer
+	// ^ play head
+	// ^ play tail
+
+	// ......................... full buffer
+	// ^ play head
+	//  ^ play tail
+
+	//                     v rec head
+	//         v rec tail
+	// ........RRRRRRRRRRRR......
+	// ^ play head
+	// ^ play tail
+
+
 	///////////////////////////////////////////////////////////////////////////
 	int push_play_block(SAMPLE_BLOCK *block) {
-		if(!m_play_count) {
-			// if this is the first block to be placed in the play buffer then
-			// the buffer pointers first need to be positioned appropriately.
-			// If there is an active rec buffer we will place the play buffer one
-			// place behind (since we should be one-in-one-out)
-			m_play_tail = m_play_head = m_rec_count? inc_ptr(m_rec_tail) : m_begin;
-		}
-		// establish the limit of the play head pointer, depending if there is also
-		// a rec buffer present
-		SAMPLE_BLOCK *limit = m_rec_count? m_rec_tail : m_play_tail;
-		if(m_rec_head == limit) {
-			// no space to insert the new block!
+		if(is_full()) {
 			return 0;
 		}
+
+		if(!m_play_count) { // first play block in the buffer
+			if(m_rec_count) {
+				// If there are rec blocks in the buffer already then we will
+				// will aim for the following location of first data block
+				// note that buffer should be 1 in - 1 out
+				// ..RRRRRRRRRRRRRR.X......................
+				//   ^ rec tail    ^ rec head
+				//                  ^ play tail
+				//                   ^ play head
+				m_play_tail = inc_ptr(m_rec_head);
+				m_play_head = m_play_tail;
+			}
+			else {
+				// else simply start at the beginning of the buffer
+				m_play_head = m_begin;
+				m_play_tail = m_begin;
+			}
+		}
+
 		// store the block in the buffer, move head pointer and update count
 		*m_play_head = *block;
 		m_play_head = inc_ptr(m_play_head);
@@ -81,20 +119,30 @@ public:
 
 	///////////////////////////////////////////////////////////////////////////
 	int push_rec_block(SAMPLE_BLOCK *block) {
-		if(!m_rec_count) {
-			// if this is the first block to be placed in the rec buffer then
-			// the rec buffer pointers first need to be positioned appropriately.
-			// If there is an active play buffer we will place the rec buffer one
-			// place behind (since we should be one-in-one-out)
-			m_rec_tail = m_rec_head = m_play_count? inc_ptr(m_play_tail) : m_begin;
-		}
-		// establish the limit of the rec head pointer, depending if there is also
-		// a play buffer present
-		SAMPLE_BLOCK *limit = m_play_count? m_play_tail : m_rec_tail;
-		if(m_rec_head == limit) {
-			// no space to insert the new block!
+
+		if(is_full()) {
 			return 0;
 		}
+		if(!m_rec_count) { // first rec block in the buffer
+			if(m_play_count) {
+				// If there are play blocks in the buffer already then we will
+				// will aim for the following location of first data block
+				// note that buffer should be 1 in - 1 out
+				// .......X.PPPPPPPPPPPPPP..........
+				//          ^ play tail   ^ playhead
+				//         ^ rec head
+				//        ^ rec tail
+				m_rec_head = dec_ptr(m_play_tail);
+				m_rec_head = dec_ptr(m_rec_head);
+				m_rec_tail = m_rec_head;
+			}
+			else {
+				// else simply start at the beginning of the buffer
+				m_rec_head = m_begin;
+				m_rec_tail = m_begin;
+			}
+		}
+
 		// store the block in the buffer, move head pointer and update count
 		*m_rec_head = *block;
 		m_rec_head = inc_ptr(m_rec_head);
@@ -113,6 +161,10 @@ public:
 			return 1;
 		}
 		return 0;
+	}
+	///////////////////////////////////////////////////////////////////////////
+	inline int is_full() {
+		return (m_play_count + m_rec_count) >= (MAX_BUF_LEN - 1);
 	}
 
 	///////////////////////////////////////////////////////////////////////////
