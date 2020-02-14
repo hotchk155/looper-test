@@ -6,7 +6,6 @@
 #ifndef AUDIOIO_H_
 #define AUDIOIO_H_
 
-#define DUMMY_AUDIO_INPUT 1
 //
 // DEFINITIONS
 //
@@ -186,6 +185,8 @@ public:
 	inline void tx_callback(I2S_Type *base, i2s_dma_handle_t *handle, status_t completionStatus, void *userData) {
 		SAMPLE_BLOCK block;
 
+		++g_stats.audio_out;
+
 		// have we just finished playing buffer #1?
 		if(m_tx_toggle) {
 			// fill buffer #1 up with new audio and queue it again (if we fail to get more audio we'll keep
@@ -211,6 +212,8 @@ public:
 //TODO error checking
 	inline void rx_callback(I2S_Type *base, i2s_dma_handle_t *handle, status_t completionStatus, void *userData) {
 		SAMPLE_BLOCK block;
+
+		++g_stats.audio_in;
 
 		// are we filling buffer #1 ?
 		if(m_rx_toggle) {

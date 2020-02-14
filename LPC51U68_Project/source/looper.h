@@ -47,12 +47,14 @@ public:
 		switch(m_state) {
 		case ST_PLAY:
 			if(!g_recording.get_audio(block)) {
+				++g_stats.play_buf_empty;
 				return 0;
 			}
 			g_recording.advance_cur_block_no();
 			break;
 		case ST_OVERDUB:
 			if(!g_recording.get_audio(block)) {
+				++g_stats.play_buf_empty;
 				return 0;
 			}
 			g_recording.advance_cur_block_no();
@@ -75,16 +77,28 @@ public:
 		case ST_INIT_REC:
 			// while making the initial recording, the input audio is
 			// written directly to the record track
-			return g_recording.put_audio(block, 1);
+			if(!g_recording.put_audio(block, 1)) {
+				++g_stats.rec_buf_full;
+				return 0;
+			}
+			return 1;
 		case ST_PLAY:
 			// while playing, the last played block is written back to
 			// the record track, bringing it up to date.
-			return g_recording.put_audio((SAMPLE_BLOCK*)&m_last_play_block, 0);
+			if(!g_recording.put_audio((SAMPLE_BLOCK*)&m_last_play_block, 0)) {
+				++g_stats.rec_buf_full;
+				return 0;
+			}
+			return 1;
 		case ST_OVERDUB:
 			// while overdubbing, the last played block is mixed with the
 			// incoming audio and written back to the record track
 			mix_audio(block, &m_last_play_block);
-			return g_recording.put_audio(block, 1);
+			if(!g_recording.put_audio(block, 1)) {
+				++g_stats.rec_buf_full;
+				return 0;
+			}
+			return 1;
 		default:
 			return 0;
 		}
@@ -100,7 +114,7 @@ public:
 		case ST_INIT_REC:
 			if(g_recording.is_loop_overflow()) {
 				g_recording.close_initial_rec();
-				g_recording.stop_or_reset_playback();
+				g_recording.stop_or_reset_playback(1);
 				m_state = ST_STOPPED;
 			}
 			break;
@@ -126,7 +140,7 @@ public:
 		// START INITIAL RECORDING
 		// Loop length, loop positions already zero
 		case ST_EMPTY:
-			g_recording.stop_or_reset_playback();
+			g_recording.stop_or_reset_playback(0);
 			g_recording.open_initial_rec();
 			m_state = ST_INIT_REC;
 			break;
@@ -135,15 +149,14 @@ public:
 		// END RECORDING AND STOP
 		case ST_INIT_REC:
 			g_recording.close_initial_rec();
-			g_recording.stop_or_reset_playback();
+			g_recording.stop_or_reset_playback(1);
 			m_state = ST_STOPPED;
 			break;
 
 		//////////////////////////////////////
 		// OVERDUB FROM START OF LOOP
 		case ST_STOPPED:
-			g_recording.stop_or_reset_playback();
-			g_recording.open_overdub();
+			g_recording.set_overdub(1);
 			m_state = ST_OVERDUB;
 			break;
 
@@ -151,14 +164,14 @@ public:
 		//////////////////////////////////////
 		// PUNCH IN
 		case ST_PLAY:
-			g_recording.open_overdub();
+			g_recording.set_overdub(1);
 			m_state = ST_OVERDUB;
 			break;
 
 		//////////////////////////////////////
 		// PUNCH OUT
 		case ST_OVERDUB:
-			g_recording.close_overdub();
+			g_recording.set_overdub(0);
 			m_state = ST_PLAY;
 			break;
 
@@ -184,14 +197,13 @@ public:
 		case ST_INIT_REC:
 			m_state = ST_STOPPED; // in case another audio block comes in
 			g_recording.close_initial_rec();
-			g_recording.stop_or_reset_playback();
+			g_recording.stop_or_reset_playback(1);
 			m_state = ST_PLAY;
 			break;
 
 		//////////////////////////////////////
 		// PLAY FROM START
 		case ST_STOPPED:
-			g_recording.stop_or_reset_playback();
 			m_state = ST_PLAY;
 			break;
 
@@ -199,15 +211,15 @@ public:
 		// STOP PLAYBACK, RETURN TO START
 		case ST_PLAY:
 			m_state = ST_STOPPED;
-			g_recording.stop_or_reset_playback();
+			g_recording.stop_or_reset_playback(1);
 			break;
 
 		//////////////////////////////////////
 		// STOP OVERDUB, RETURN TO START
 		case ST_OVERDUB:
 			m_state = ST_STOPPED;
-			g_recording.close_overdub();
-			g_recording.stop_or_reset_playback();
+			g_recording.set_overdub(0);
+			g_recording.stop_or_reset_playback(1);
 			break;
 		}
 	}

@@ -13,6 +13,7 @@
 #include "fsl_spi_dma.h"
 #include "fsl_mrt.h"
 #include "fsl_ctimer.h"
+#include "stats.h"
 #include "defs.h"
 #include "ui.h"
 #include "clock.h"
@@ -43,7 +44,7 @@ int main(void) {
 	BOARD_InitBootClocks();
     BOARD_InitPins();
 
-
+    memset(&g_stats, 0, sizeof(g_stats));
     g_clock.init();
 
 
@@ -58,22 +59,38 @@ int main(void) {
 	g_pwm.set_duty_0(50);
 	g_pwm.set_duty_1(50);
 
+    g_sd_card.init();
+
+    // Fill SD card with 200 sinewave samples
+    //g_sd_card.test1A();
+    //g_sd_card.test1B(); while(1);
+
     g_recording.init();
 
     g_audioio.set_callback(&g_looper);
 	g_audioio.init();
-	g_audioio.start();
 
-    g_sd_card.init();
-    //g_sd_card.test1(); while(1);
+
+
 
 
     //g_recording.test1();
     //while(1) g_recording.run();
 
 
-    g_recording.set_loop_len(4);
-    g_looper.run_till_state_change();
+    g_recording.set_loop_len(200);
+    g_recording.stop_or_reset_playback(1);
+
+	for(int i=0; i<1000; ++i) {
+		g_looper.run();
+		g_recording.run();
+		g_sd_card.run();
+	}
+
+	g_audioio.start();
+
+
+    //g_looper.run_till_state_change();
     g_looper.on_play_stop_button();
 
 

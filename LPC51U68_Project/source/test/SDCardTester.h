@@ -14,25 +14,6 @@ public:
 		return 1;
 	}
 
-
-	// Write 4 block sinewave sample into both track slots
-	int test1() {
-		write_block_and_wait(10, (SAMPLE_BLOCK*)&sine::quad0);
-		write_block_and_wait(11, (SAMPLE_BLOCK*)&sine::quad1);
-		write_block_and_wait(12, (SAMPLE_BLOCK*)&sine::quad2);
-		write_block_and_wait(13, (SAMPLE_BLOCK*)&sine::quad3);
-		write_block_and_wait(320010, (SAMPLE_BLOCK*)&sine::quad0);
-		write_block_and_wait(320011, (SAMPLE_BLOCK*)&sine::quad1);
-		write_block_and_wait(320012, (SAMPLE_BLOCK*)&sine::quad2);
-		write_block_and_wait(320013, (SAMPLE_BLOCK*)&sine::quad3);
-
-		while(1) {
-			run();
-		}
-		return 1;
-	}
-
-
 	int read_block_and_wait(int block_no, SAMPLE_BLOCK *block) {
 		LOG2("TEST: read_block_and_wait %d\r\n", block_no);
 		if(!is_ready()) {
@@ -46,6 +27,47 @@ public:
 		LOG1("TEST: read_block_and_wait DONE\r\n");
 		return 1;
 	}
+
+	// write 200 sample blocks (50 sine wave cycles)
+	int test1A() {
+		int addr = 10;
+		for(int i=0; i<50; ++i) {
+			write_block_and_wait(addr++, (SAMPLE_BLOCK*)&sine::quad0);
+			write_block_and_wait(addr++, (SAMPLE_BLOCK*)&sine::quad1);
+			write_block_and_wait(addr++, (SAMPLE_BLOCK*)&sine::quad2);
+			write_block_and_wait(addr++, (SAMPLE_BLOCK*)&sine::quad3);
+		}
+		while(1) {
+			run();
+		}
+		return 1;
+	}
+
+	int test1B() {
+		int addr = 10;
+		SAMPLE_BLOCK block = {0};
+		for(int i=0; i<50; ++i) {
+			PRINTF("Checking %d...\r\n", i);
+			read_block_and_wait(addr++, (SAMPLE_BLOCK*)&block);
+			if(memcmp(&block, &sine::quad0, sizeof(SAMPLE_BLOCK))) {
+				PRINTF("COMPARISON FAIL BLOCK 1 %d\r\n", i);
+			}
+			read_block_and_wait(addr++, (SAMPLE_BLOCK*)&block);
+			if(memcmp(&block, &sine::quad1, sizeof(SAMPLE_BLOCK))) {
+				PRINTF("COMPARISON FAIL BLOCK 2 %d\r\n", i);
+			}
+			read_block_and_wait(addr++, (SAMPLE_BLOCK*)&block);
+			if(memcmp(&block, &sine::quad2, sizeof(SAMPLE_BLOCK))) {
+				PRINTF("COMPARISON FAIL BLOCK 3 %d\r\n", i);
+			}
+			read_block_and_wait(addr++, (SAMPLE_BLOCK*)&block);
+			if(memcmp(&block, &sine::quad3, sizeof(SAMPLE_BLOCK))) {
+				PRINTF("COMPARISON FAIL BLOCK 4 %d\r\n", i);
+			}
+		}
+		return 1;
+	}
+
 
 	int test2() {
 		SAMPLE_BLOCK block = {0};

@@ -1,13 +1,81 @@
 #ifndef BLOCK_BUFFER_H_
 #define BLOCK_BUFFER_H_
 
-enum {
-	SZ_BLOCK_BUFFER = 128,	// the size of the block buffer, in SAMPLE_BLOCKs
-};
+class CBlockBuffer
+{
 
-// The main RAM block (64K) of the MCU is given over completely
-// to the looper block buffer
-__DATA(SRAM0) SAMPLE_BLOCK g_buffer[SZ_BLOCK_BUFFER]; // the big buffer for the looper
+	SAMPLE_BLOCK *m_tail;
+	SAMPLE_BLOCK *m_head;
+	SAMPLE_BLOCK *m_begin;
+	SAMPLE_BLOCK *m_end;
+	int m_size;
+	int m_count;
+
+
+	///////////////////////////////////////////////////////////////////////////
+	inline SAMPLE_BLOCK *inc_ptr(SAMPLE_BLOCK *ptr) {
+		if(++ptr == m_end) {
+			return m_begin;
+		}
+		return ptr;
+	}
+
+public:
+	///////////////////////////////////////////////////////////////////////////
+	CBlockBuffer(SAMPLE_BLOCK *buf, int size) {
+		m_size = size;
+		m_begin = buf;
+		m_end = buf + size;
+		clear();
+	}
+
+	///////////////////////////////////////////////////////////////////////////
+	int push(SAMPLE_BLOCK *block) {
+		SAMPLE_BLOCK *next = inc_ptr(m_head);
+		if(next == m_tail) {
+			return 0;
+		}
+		*m_head = *block;
+		m_head = next;
+		++m_count;
+		return 1;
+	}
+
+	///////////////////////////////////////////////////////////////////////////
+	int pop(SAMPLE_BLOCK *block) {
+		if(m_head == m_tail) {
+			return 0;
+		}
+		*block = *m_tail;
+		m_tail = inc_ptr(m_tail);
+		--m_count;
+		return 1;
+	}
+
+	///////////////////////////////////////////////////////////////////////////
+	int get_count() {
+		return m_count;
+	}
+
+	///////////////////////////////////////////////////////////////////////////
+	int get_size() {
+		return m_size;
+	}
+
+
+	///////////////////////////////////////////////////////////////////////////
+	int is_full() {
+		return (m_count >= m_size-1);
+	}
+
+	///////////////////////////////////////////////////////////////////////////
+	void clear() {
+		m_tail = m_begin;
+		m_head = m_begin;
+		m_count = 0;
+	}
+
+#if 0
 
 class CBlockBuffer
 {
@@ -186,6 +254,7 @@ public:
 	void clear_rec_buffer() {
 		m_rec_count = 0;
 	}
+#endif
 };
 
 #endif /* BLOCK_BUFFER_H_ */

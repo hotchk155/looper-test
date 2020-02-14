@@ -19,7 +19,7 @@ protected:
 #if 0
     	FAST_SPI_CLOCK_BPS 		= 1000000U
 #else
-    	FAST_SPI_CLOCK_BPS 		= 12000000U
+    	FAST_SPI_CLOCK_BPS 		= 20000000U
 #endif
 	};
 	enum {

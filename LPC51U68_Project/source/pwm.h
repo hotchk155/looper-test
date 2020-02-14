@@ -33,7 +33,7 @@ public:
 	void set_duty_0(int duty) {
 	    CTIMER_SetupPwmPeriod(CTIMER0, kCTIMER_Match_0, m_pwm_period, get_match_value(duty), false);
 	}
-	void set_duty_1(int duty) {
+	void set_duty_1(int duty) {//P1_4
 	    CTIMER_SetupPwmPeriod(CTIMER0, kCTIMER_Match_1, m_pwm_period, get_match_value(duty), false);
 	}
 
