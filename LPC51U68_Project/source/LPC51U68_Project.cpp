@@ -62,8 +62,8 @@ int main(void) {
 
 	g_looper.init();
 	g_pwm.init();
-	g_pwm.set_duty_0(50);
-	g_pwm.set_duty_1(50);
+	g_pwm.set_duty_0(0);
+	g_pwm.set_duty_1(0);
 
     g_sd_card.init();
 

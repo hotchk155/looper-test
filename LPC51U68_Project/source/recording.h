@@ -1,3 +1,7 @@
+/*
+
+ TODO
+ */
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // RECORDING MANAGER
@@ -24,16 +28,17 @@ friend class CLooperTest;
 public:
 	typedef enum {
 		REC_NONE,
+		REC_INIT,
 		REC_PLAY,
-		REC_NEW
+		REC_OVERDUB
 	} REC_MODE;
 protected:
 	// various constants
 	enum {
 		NUM_TRACKS 			 = 2,
 		TRACKS_BASE_BLOCK	 = 10,
-//		TRACK_SIZE_BLOCKS    = 320000, // 320000 blocks x 256 samples / 44100 = approx 31 mins
-		TRACK_SIZE_BLOCKS    = 5000, // 320000 blocks x 256 samples / 44100 = approx 31 mins
+		TRACK_SIZE_BLOCKS    = 320000, // 320000 blocks x 256 samples / 44100 = approx 31 mins
+//		TRACK_SIZE_BLOCKS    = 5000, // 320000 blocks x 256 samples / 44100 = approx 31 mins
 		MAGIC_COOKIE		 = 0xAA5500,
 		READ_BATCH			 = 10,
 		WRITE_BATCH			 = 10,
@@ -54,6 +59,25 @@ protected:
 	typedef struct {
 		int start_block;	// SD card block where the trackl starts
 	} TRACK_INFO;
+
+	typedef struct _TRACK_POSITION {
+		int track_id;
+		int block_no;
+
+		inline void to_track(int track) {
+			track_id = track;
+			block_no = 0;
+		}
+		inline void to_track(struct _TRACK_POSITION &pos) {
+			to_track(pos.track_id);
+		}
+		inline void to_other_track(struct _TRACK_POSITION &pos) {
+			to_track(!pos.track_id);
+		}
+		inline void to_other_track() {
+			to_other_track(*this);
+		}
+	} TRACK_POSITION;
 
 	// This is our cache of the recording status info from the SD card
 	RECORDING_INFO m_rec;
@@ -83,43 +107,26 @@ protected:
 		CYCLE_ALL_UNCHANGED
 	} m_cycle_status;
 
-	int m_cur_track_id;
-	int m_cur_block_no;
-
-	// member variables track where read-ahead data is coming from... this might have
-	// already wrapped over into a different track to that which is playing
-	int m_read_ahead_track_id;
-	int m_read_ahead_block_no;
-
-	int m_write_behind_track_id;
-	int m_write_behind_block_no;
+	TRACK_POSITION m_cur_pos;
+	TRACK_POSITION m_read_ahead_pos;
+	TRACK_POSITION m_write_behind_pos;
 
 	int m_is_read_ahead; 		// are we reading ahead (not needed during initial recording)
-
 	int m_loop_overflow_flag;	// flag records if loop overflowed allowed space during initial recording
 	int m_loop_cycle_flag;		// flag records if loop cycled from end to start during playback/overdub
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	// Helper function for toggling the active record and playback tracks while leaving any other
-	// tracks (e.g. undo) alone
-	int other_track_id(int track_id) {
-		return !track_id;
-	}
-
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	/*
 	void reset_to_start() {
+		m_read_ahead_track_id = m_cur_track_id;
+		m_write_behind_track_id = other_track_id(m_cur_track_id);
 		m_cur_block_no = 0;
 		m_read_ahead_block_no = 0;
 		m_write_behind_block_no = 0;
-		m_read_ahead_track_id = m_cur_track_id;
-		m_write_behind_track_id = other_track_id(m_cur_track_id);
-
 		m_loop_overflow_flag = 0;
 		m_loop_cycle_flag = 0;
-
-		clear_sd_buffers();
 	}
+	*/
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	void clear_sd_buffers() {
@@ -138,7 +145,7 @@ protected:
 
 			// track the block number corresponding to the position in the loop that
 			// is actually being recorded/played at this moment in time
-			if(++m_cur_block_no >= m_rec.loop_len) {
+			if(++m_cur_pos.block_no >= m_rec.loop_len) {
 
 				++g_stats.loop_cycles;
 
@@ -146,8 +153,7 @@ protected:
 				m_loop_cycle_flag = 1;
 
 				// move to other track
-				m_cur_block_no = 0;
-				m_cur_track_id = other_track_id(m_cur_track_id);
+				m_cur_pos.to_other_track();
 
 				// track two loop cycles without any overdubs.. at this point both tracks
 				// have identical content so no need to do real write behind to SD card as
@@ -166,8 +172,8 @@ protected:
 			}
 		}
 		// no loop length, so make sure that we don't exceed the allowable loop size
-		else if(m_cur_block_no < TRACK_SIZE_BLOCKS - 1) {
-			++m_cur_block_no;
+		else if(m_cur_pos.block_no < TRACK_SIZE_BLOCKS - 1) {
+			++m_cur_pos.block_no;
 		}
 		else {
 			// no more space for loop!
@@ -190,10 +196,11 @@ public:
 		m_read_write_phase = READ_AHEAD_PHASE;
 		m_blocks_to_transfer = READ_BATCH;
 		m_cycle_status = CYCLE_CLEAN_PASS;
-		m_cur_track_id = INIT_REC_TRACK_ID;
+		m_cur_pos.track_id = INIT_REC_TRACK_ID;
 		m_is_read_ahead = 0;
-		reset_to_start();
 
+		m_loop_overflow_flag = 0;
+		m_loop_cycle_flag = 0;
 	}
 
 
@@ -233,10 +240,18 @@ public:
 	// called when we receive a block of audio.
 	int put_audio(SAMPLE_BLOCK *block, REC_MODE mode) {
 		switch(mode) {
-		case REC_NEW:
+		case REC_INIT:
 			m_cycle_status = CYCLE_DIRTY_PASS;
-			// fall thru
+			advance_cur_block_no();
+			if(!m_play_buf.is_full()) {
+				m_play_buf.push(block); // pre-populate play buffer with the first samples
+			}
+			return m_rec_buf.push(block);
 		case REC_PLAY:
+			advance_cur_block_no();
+			return m_rec_buf.push(block);
+		case REC_OVERDUB:
+			m_cycle_status = CYCLE_DIRTY_PASS;
 			advance_cur_block_no();
 			return m_rec_buf.push(block);
 		case REC_NONE:
@@ -248,32 +263,61 @@ public:
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	void erase_recording() {
+		clear_sd_buffers();
 		m_rec.loop_len = 0;
+		m_loop_overflow_flag = 0;
+		m_loop_cycle_flag = 0;
 		m_is_read_ahead = 0;
-		reset_to_start();
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	// prepare for the initial recording of the loop
 	void open_initial_rec() {
-		reset_to_start();
+		clear_sd_buffers();
+		m_cur_pos.to_track(INIT_REC_TRACK_ID);
+		m_write_behind_pos.to_track(m_cur_pos);
+		m_read_ahead_pos.to_other_track(m_cur_pos);
 		m_is_read_ahead = 0;
-		m_cur_track_id = INIT_REC_TRACK_ID;
-		m_write_behind_track_id = m_cur_track_id;
-		m_read_ahead_track_id = other_track_id(m_cur_track_id);
+		m_loop_overflow_flag = 0;
+		m_loop_cycle_flag = 0;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	// close out initial recording, enabling playback to commence from start
 	void close_initial_rec() {
-		m_cur_track_id = INIT_REC_TRACK_ID; // prepare to read from track we just recorded
-		m_rec.loop_len = m_cur_block_no;
+
+		// store the length of the loop
+		m_rec.loop_len = m_cur_pos.block_no;
+
+		// set up tracks so that we will play the newly recorded track
+		m_cur_pos.to_track(INIT_REC_TRACK_ID);
+		m_read_ahead_pos.to_track(m_cur_pos);
+		m_write_behind_pos.to_other_track(m_cur_pos);
+
+		// during recording we pre-buffered blocks from the start, so
+		// position the read ahead block accordingly
+		m_read_ahead_pos.block_no = m_play_buf.get_count();
+
+		// set flags
 		m_is_read_ahead = 1;
+		m_loop_overflow_flag = 0;
+		m_loop_cycle_flag = 0;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	void reset_playback() {
+
+		// clear any buffered blocks
+		clear_sd_buffers();
+
+		// return to the start of the current tracks
+		m_write_behind_pos.to_other_track(m_cur_pos);
+		m_read_ahead_pos.to_track(m_cur_pos);
+
+		// set flags
+		m_loop_overflow_flag = 0;
+		m_loop_cycle_flag = 0;
 		m_is_read_ahead = 1;
-		reset_to_start();
 	}
 
 
@@ -295,10 +339,9 @@ public:
 				++g_stats.block_reads;
 
 				// step to the next block
-				if(++m_read_ahead_block_no >= m_rec.loop_len) {
+				if(++m_read_ahead_pos.block_no >= m_rec.loop_len) {
 					// prepare to start reading from the other track
-					m_read_ahead_block_no = 0;
-					m_read_ahead_track_id = other_track_id(m_read_ahead_track_id);
+					m_read_ahead_pos.to_other_track();
 				}
 			}
 			else {
@@ -347,22 +390,21 @@ public:
 					}
 					else {
 						// otherwise write the block to SD card
-						int block_no = m_track[m_write_behind_track_id].start_block + m_write_behind_block_no;
+						int block_no = m_track[m_write_behind_pos.track_id].start_block + m_write_behind_pos.block_no;
 						g_sd_card.write_block(block_no, &block);
 						++g_stats.block_writes;
 					}
 					// increment the write block location on SD card
-					++m_write_behind_block_no;
-					if(m_rec.loop_len && m_write_behind_block_no >= m_rec.loop_len) {
+					++m_write_behind_pos.block_no;
+					if(m_rec.loop_len && m_write_behind_pos.block_no >= m_rec.loop_len) {
 						// next we'll be writing to the other track
-						m_write_behind_block_no = 0;
-						m_write_behind_track_id = other_track_id(m_write_behind_track_id);
+						m_write_behind_pos.to_other_track();
 					}
 				}
 			}
 			else if (!m_play_buf.is_full()) {
 				// request a block from the card.. this is an asynchronous operation
-				int block_no = m_track[m_read_ahead_track_id].start_block + m_read_ahead_block_no;
+				int block_no = m_track[m_read_ahead_pos.track_id].start_block + m_read_ahead_pos.block_no;
 				g_sd_card.request_read_block(block_no);
 			}
 		}

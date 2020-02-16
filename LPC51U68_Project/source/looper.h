@@ -53,7 +53,7 @@ protected:
 	////////////////////////////////////////////////////////////////////
 	void mix_audio(SAMPLE_BLOCK *block, SAMPLE_BLOCK *overdub) {
 		for(int i=0; i<	SZ_SAMPLE_BLOCK; ++i) {
-			int res = block->data[i] + overdub->data[i];
+			int res = (int16_t)block->data[i] + (int16_t)overdub->data[i];
 			if(res < MIN_SAMPLE_VALUE) {
 				res = MIN_SAMPLE_VALUE;
 			}
@@ -108,6 +108,12 @@ public:
 		case ST_EMPTY:
 		case ST_STOPPED:
 			break;
+		case ST_INIT_REC:
+			if(!g_recording.put_audio(block, CRecording::REC_INIT)) {
+				++g_stats.rec_buf_full;
+				return 0;
+			}
+			break;
 		case ST_PLAY:
 			if(!g_recording.put_audio(block, CRecording::REC_PLAY)) {
 				++g_stats.rec_buf_full;
@@ -116,9 +122,7 @@ public:
 			break;
 		case ST_OVERDUB:
 			mix_audio(block, &m_last_play_block);
-			// fall thru
-		case ST_INIT_REC:
-			if(!g_recording.put_audio(block, CRecording::REC_NEW)) {
+			if(!g_recording.put_audio(block, CRecording::REC_OVERDUB)) {
 				++g_stats.rec_buf_full;
 				return 0;
 			}
@@ -297,7 +301,7 @@ public:
 #endif
 
 
-#if 1
+#if 0
 	// FORCE SINEWAVE SIGNAL AT AUDIO IN
 	int put_audio_block(SAMPLE_BLOCK *block) {
 		static int count = 0;

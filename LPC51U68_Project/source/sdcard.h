@@ -531,7 +531,7 @@ public:
 				}
 			}
 			else if(m_status == 0x00) { // expected response
-				m_retry = 10;
+				m_retry = 1;
 				set_state(ST_WRITE_DATA_DELAY);
 			}
 			else { // invalid response
