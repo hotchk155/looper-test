@@ -406,18 +406,23 @@ public:
 		SPI_MasterSetBaud(SDCARD_SPI_BASE, FAST_SPI_CLOCK_BPS, CLOCK_GetFroHfFreq());
 
 		if(!cmd_reset_card()) {
+			g_stats.sd_setup_error = 111;
 			return 0;
 		}
 		if(!cmd_check_voltage()) {
+			g_stats.sd_setup_error = 222;
 			return 0;
 		}
 		if(!cmd_initialise_card()) {
+			g_stats.sd_setup_error = 333;
 			return 0;
 		}
 		if(!cmd_set_block_size(SAMPLE_BLOCK_SIZE)) {
+			g_stats.sd_setup_error = 444;
 			return 0;
 		}
 		if(!cmd_read_ocr()) {
+			g_stats.sd_setup_error = 555;
 			return 0;
 		}
 		m_lba_mode = !!(m_response & OCR_HIGH_CAPACITY);
@@ -474,6 +479,7 @@ public:
 		////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// READY TO START A NEW READ OR WRITE TRANSACTION
 		case ST_READY:
+			g_ui.set_rec(0);
 			switch(m_request) {
 			case REQ_READ:
 				m_request = REQ_NONE;
@@ -491,6 +497,9 @@ public:
 		////////////////////////////////////////////////////////////////////////////////////
 		// START A NEW MULTI BLOCK WRITE
 		case ST_WRITE_CMD:
+			PRINTF("write %d\r\n",m_req_block_no);
+
+			g_ui.set_rec(1);
 			LOG2("ST_WRITE_CMD %d\r\n", m_req_block_no);
 
 			csel(0); // assert chip select
@@ -594,6 +603,7 @@ public:
 		////////////////////////////////////////////////////////////////////////////////////
 		// LAST BLOCK WRITE IS SUCCESSFUL, CHECKING IF WE CAN EXTEND TO ANOTHER BLOCK
 		case ST_WRITE_READY:
+			g_ui.set_rec(0);
 			if((REQ_WRITE == m_request) && (m_req_block_no == m_last_block_no + 1)) {
 				// we can continue the write to another block
 				m_retry = 10;
@@ -723,6 +733,14 @@ public:
 		////////////////////////////////////////////////////////////////////////////////////
 		// LAST BLOCK READ IS SUCCESSFUL, CHECKING IF WE CAN EXTEND TO ANOTHER BLOCK
 		case ST_READ_READY:
+			/*
+			if(!sine::is_known(&m_data_packet.data)) {
+				PRINTF("OUCH %d\r\n",m_req_block_no);
+			}
+			else {
+				PRINTF("ok.. %d\r\n",m_req_block_no);
+			}
+			*/
 			if((REQ_READ == m_request) && (m_req_block_no == m_last_block_no + 1)) {
 				// we can continue the write to another block
 				set_state(ST_READ_DATA_TOKEN);
@@ -776,6 +794,8 @@ public:
 
 			////////////////////////////////////////////////////////////////////////////////////
 		case ST_FATAL:
+			++g_stats.sd_access_errors;
+			g_ui.set_rec(0);
 			csel(1); // de-assert CSEL
 			set_state(ST_STOP);
 			break;

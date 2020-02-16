@@ -22,6 +22,7 @@ pin_labels:
 - {pin_num: '29', pin_signal: PIO1_9/FC3_RXD_SDA_MOSI/CTIMER0_CAP2/USB0_UP_LED, label: UI_2_IO, identifier: UI_2_UI;UI_2_IO}
 - {pin_num: '12', pin_signal: PIO0_30/FC1_TXD_SCL_MISO/SCT0_OUT3/CTIMER0_MAT2/CTIMER0_CAP2/ADC0_1, label: UI_LED_SINK, identifier: UI_SW_READ;UI_LED_SINK}
 - {pin_num: '16', pin_signal: PIO1_2/MCLK/FC7_SSEL3/SCT0_OUT5/FC5_SSEL3/FC4_RXD_SDA_MOSI/ADC0_5, label: UI_SW_READ, identifier: UI_LED_SRC;UI_LED_SINK;UI_SW_READ}
+- {pin_num: '61', pin_signal: PIO0_21/CLKOUT/FC0_TXD_SCL_MISO/CTIMER3_MAT0, label: REC_LED, identifier: REC_LED}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 
@@ -65,6 +66,7 @@ BOARD_InitPins:
     mode: pullDown}
   - {pin_num: '12', peripheral: GPIO, signal: 'PIO0, 30', pin_signal: PIO0_30/FC1_TXD_SCL_MISO/SCT0_OUT3/CTIMER0_MAT2/CTIMER0_CAP2/ADC0_1, identifier: UI_LED_SINK,
     direction: OUTPUT, mode: inactive}
+  - {pin_num: '61', peripheral: GPIO, signal: 'PIO0, 21', pin_signal: PIO0_21/CLKOUT/FC0_TXD_SCL_MISO/CTIMER3_MAT0, direction: OUTPUT}
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
  */
 
@@ -89,6 +91,11 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
     .outputLogic = 0U
   };
   GPIO_PinInit(BOARD_INITPINS_UI_1_IO_GPIO, BOARD_INITPINS_UI_1_IO_PORT, BOARD_INITPINS_UI_1_IO_PIN, &UI_1_IO_io_config); /* Initialize GPIO functionality on pin PIO0_3 (number: 37) */
+  gpio_pin_config_t REC_LED_io_config = {                    /* PORT0 PIN21 (number: 61) GPIO configuration structure */
+    .pinDirection = kGPIO_DigitalOutput,
+    .outputLogic = 0U
+  };
+  GPIO_PinInit(BOARD_INITPINS_REC_LED_GPIO, BOARD_INITPINS_REC_LED_PORT, BOARD_INITPINS_REC_LED_PIN, &REC_LED_io_config); /* Initialize GPIO functionality on pin PIO0_21 (number: 61) */
   gpio_pin_config_t UI_LED_SINK_io_config = {                /* PORT0 PIN30 (number: 12) GPIO configuration structure */
     .pinDirection = kGPIO_DigitalOutput,
     .outputLogic = 0U
@@ -130,6 +137,11 @@ void BOARD_InitPins(void) { /* Function assigned for the Cortex-M0P */
       | IOCON_PIO_FUNC(PIO02_FUNC_ALT0)                      /* Selects pin function.: PORT02 (pin 36) is configured as PIO0_2 */
       | IOCON_PIO_MODE(PIO02_MODE_INACTIVE)                  /* Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
       | IOCON_PIO_DIGIMODE(PIO02_DIGIMODE_DIGITAL)           /* Select Analog/Digital mode.: Digital mode. */
+    );
+  IOCON->PIO[0][21] = ((IOCON->PIO[0][21] &
+    (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_DIGIMODE_MASK)))      /* Mask bits to zero which are setting */
+      | IOCON_PIO_FUNC(PIO021_FUNC_ALT0)                     /* Selects pin function.: PORT021 (pin 61) is configured as PIO0_21 */
+      | IOCON_PIO_DIGIMODE(PIO021_DIGIMODE_DIGITAL)          /* Select Analog/Digital mode.: Digital mode. */
     );
   IOCON->PIO[0][3] = ((IOCON->PIO[0][3] &
     (~(IOCON_PIO_FUNC_MASK | IOCON_PIO_MODE_MASK | IOCON_PIO_DIGIMODE_MASK))) /* Mask bits to zero which are setting */

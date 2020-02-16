@@ -41,6 +41,9 @@ public:
 		m_keys = 0;
 		m_debounce = 0;
 	}
+	inline void set_rec(byte mode) {
+		GPIO_PinWrite(BOARD_INITPINS_REC_LED_GPIO, BOARD_INITPINS_REC_LED_PORT, BOARD_INITPINS_REC_LED_PIN, !!mode);
+	}
 	void set_led(int led, byte mode) {
 		m_led[led] = mode;
 	}

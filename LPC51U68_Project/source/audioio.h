@@ -32,7 +32,9 @@ extern "C" void I2SDMARxCallback(I2S_Type *base, i2s_dma_handle_t *handle, statu
 class CAudioIO {
 
 	enum {
-		SZ_DMA_SAMPLE_BLOCK = (SZ_SAMPLE_BLOCK * 2) // need L + R channels for I2S
+		SZ_DMA_SAMPLE_BLOCK = (SZ_SAMPLE_BLOCK * 2), // need L + R channels for I2S
+		//SZ_DMA_SAMPLE_BLOCK = (100+SZ_SAMPLE_BLOCK * 2) // need L + R channels for I2S
+		SZ_DMA_SAMPLE_BLOCK_BYTES = (SZ_DMA_SAMPLE_BLOCK * 2) // short ints to bytes
 	};
 
 	// API data
@@ -113,10 +115,10 @@ public:
 		m_tx_transfer1.data = (byte*)m_tx_buf1;
 		m_rx_transfer0.data = (byte*)m_rx_buf0;
 		m_rx_transfer1.data = (byte*)m_rx_buf1;
-		m_tx_transfer0.dataSize = sizeof(m_tx_buf0);
-		m_tx_transfer1.dataSize = sizeof(m_tx_buf1);
-		m_rx_transfer0.dataSize = sizeof(m_rx_buf0);
-		m_rx_transfer1.dataSize = sizeof(m_rx_buf1);
+		m_tx_transfer0.dataSize = SZ_DMA_SAMPLE_BLOCK * sizeof(SAMPLE); // don't use sizeof().. it is wrong due to
+		m_tx_transfer1.dataSize = SZ_DMA_SAMPLE_BLOCK * sizeof(SAMPLE); // use of alignment on 32-bit boundaries
+		m_rx_transfer0.dataSize = SZ_DMA_SAMPLE_BLOCK * sizeof(SAMPLE); //
+		m_rx_transfer1.dataSize = SZ_DMA_SAMPLE_BLOCK * sizeof(SAMPLE); //
 
 		// reset the I2S peripherals
 	    RESET_PeripheralReset(kFC6_RST_SHIFT_RSTn);

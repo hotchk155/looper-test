@@ -85,6 +85,17 @@ const SAMPLE_BLOCK quad3 = {
 		59142, 	59339, 	59537, 	59735, 	59933, 	60131, 	60329, 	60528, 	60727, 	60926, 	61125, 	61324, 	61523, 	61723, 	61923, 	62123,
 		62323, 	62523, 	62723, 	62924, 	63124, 	63325, 	63525, 	63726, 	63927, 	64128, 	64328, 	64529, 	64730, 	64931, 	65132, 	65333,
 };
+
+
+int is_known(SAMPLE_BLOCK *block) {
+	return (
+		memcmp(block, &sine::quad0, sizeof(SAMPLE_BLOCK)) &&
+		memcmp(block, &sine::quad1, sizeof(SAMPLE_BLOCK)) &&
+		memcmp(block, &sine::quad2, sizeof(SAMPLE_BLOCK)) &&
+		memcmp(block, &sine::quad3, sizeof(SAMPLE_BLOCK)));
+}
+
+
 };
 /*
 	const DBLK g_sine0 = {{

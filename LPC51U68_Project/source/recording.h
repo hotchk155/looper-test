@@ -20,16 +20,18 @@ __DATA(SRAM0) SAMPLE_BLOCK g_write_buffer[SZ_BLOCK_BUFFER]; // the big buffer fo
 
 
 class CRecording {
-
+friend class CLooperTest;
 protected:
 	// various constants
 	enum {
-		NUM_TRACKS 			= 2,
-		TRACKS_BASE_BLOCK	= 10,
-		TRACK_SIZE_BLOCKS   = 320000, // 320000 blocks x 256 samples / 44100 = approx 31 mins
-		MAGIC_COOKIE		= 0xAA5500,
-		READ_BATCH			= 10,
-		WRITE_BATCH			= 10,
+		NUM_TRACKS 			 = 2,
+		TRACKS_BASE_BLOCK	 = 10,
+//		TRACK_SIZE_BLOCKS    = 320000, // 320000 blocks x 256 samples / 44100 = approx 31 mins
+		TRACK_SIZE_BLOCKS    = 5000, // 320000 blocks x 256 samples / 44100 = approx 31 mins
+		MAGIC_COOKIE		 = 0xAA5500,
+		READ_BATCH			 = 10,
+		WRITE_BATCH			 = 10,
+		INIT_REC_TRACK_ID    = 0
 	};
 
 	// This is the information that gets written to the SD card so that we can still use
@@ -53,6 +55,9 @@ protected:
 	// This is a look up of track layout info
 	TRACK_INFO m_track[NUM_TRACKS];
 
+	// the last block to be output
+	SAMPLE_BLOCK m_cur_block;
+
 	CBlockBuffer m_rec_buf;
 	CBlockBuffer m_play_buf;
 
@@ -60,7 +65,6 @@ protected:
 	// we toggle between batches of reads and batches of writes. This variable tracks what phase (type of batch) we
 	// are doing now
 	enum {
-		IDLE_PHASE,
 		READ_AHEAD_PHASE,
 		WRITE_BEHIND_PHASE,
 	} m_read_write_phase;
@@ -76,6 +80,12 @@ protected:
 		CYCLE_ALL_UNCHANGED
 	} m_cycle_status;
 
+	enum {
+		REC_STOP,
+		REC_PLAY,
+		REC_INITIAL,
+		REC_OVERDUB
+	} m_rec_mode;
 
 	int m_cur_track_id;
 	int m_cur_block_no;
@@ -89,11 +99,26 @@ protected:
 	int m_write_behind_block_no;
 
 	int m_is_read_ahead; 		// are we reading ahead (not needed during initial recording)
-	int m_is_overdub;		// are we overdubbing?
+	//int m_is_overdub;		// are we overdubbing?
 
 	int m_loop_overflow_flag;	// flag records if loop overflowed allowed space during initial recording
 	int m_loop_cycle_flag;		// flag records if loop cycled from end to start during playback/overdub
 
+
+
+	////////////////////////////////////////////////////////////////////
+	void mix_audio(SAMPLE_BLOCK *block, SAMPLE_BLOCK *overdub) {
+		for(int i=0; i<	SZ_SAMPLE_BLOCK; ++i) {
+			int res = block->data[i] + overdub->data[i];
+			if(res < MIN_SAMPLE_VALUE) {
+				res = MIN_SAMPLE_VALUE;
+			}
+			else if(res > MAX_SAMPLE_VALUE) {
+				res = MAX_SAMPLE_VALUE;
+			}
+			block->data[i] = res;
+		}
+	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Helper function for toggling the active record and playback tracks while leaving any other
@@ -102,10 +127,82 @@ protected:
 		return !track_id;
 	}
 
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	void reset_playback(int read_ahead) {
+		clear_sd_buffers();
+
+		m_cur_block_no = 0;
+		m_read_ahead_block_no = 0;
+		m_write_behind_block_no = 0;
+		m_read_ahead_track_id = m_cur_track_id;
+		m_write_behind_track_id = other_track_id(m_cur_track_id);
+
+		m_is_read_ahead = read_ahead;
+		m_rec_mode = REC_STOP;
+		m_loop_overflow_flag = 0;
+		m_loop_cycle_flag = 0;
+
+	}
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	void clear_sd_buffers() {
+		m_rec_buf.clear();
+		m_play_buf.clear();
+		g_sd_card.read_block_ready(NULL);
+
+	}
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Advance the play/rec position (corresponds to the sample that is actually being played/overdubbed)
+	void advance_cur_block_no() {
+
+		// has a loop been established?
+		if(m_rec.loop_len) {
+
+			// track the block number corresponding to the position in the loop that
+			// is actually being recorded/played at this moment in time
+			if(++m_cur_block_no >= m_rec.loop_len) {
+
+				++g_stats.loop_cycles;
+
+				// loop has cycled past end and back to start
+				m_loop_cycle_flag = 1;
+
+				// move to other track
+				m_cur_block_no = 0;
+				m_cur_track_id = other_track_id(m_cur_track_id);
+
+				// track two loop cycles without any overdubs.. at this point both tracks
+				// have identical content so no need to do real write behind to SD card as
+				// data has not changed
+				switch(m_cycle_status) {
+				case CYCLE_DIRTY_PASS:
+					m_cycle_status = CYCLE_CLEAN_PASS;
+					break;
+				case CYCLE_CLEAN_PASS:
+					m_cycle_status = CYCLE_ALL_UNCHANGED;
+					break;
+				case CYCLE_ALL_UNCHANGED:
+					// no change
+					break;
+				}
+			}
+		}
+		// no loop length, so make sure that we don't exceed the allowable loop size
+		else if(m_cur_block_no < TRACK_SIZE_BLOCKS - 1) {
+			++m_cur_block_no;
+		}
+		else {
+			// no more space for loop!
+			m_loop_overflow_flag = 1;
+		}
+	}
+
 public:
 	CRecording() :
-		m_rec_buf(g_read_buffer, SZ_BLOCK_BUFFER),
-		m_play_buf(g_write_buffer, SZ_BLOCK_BUFFER)
+		m_rec_buf(g_write_buffer, SZ_BLOCK_BUFFER),
+		m_play_buf(g_read_buffer, SZ_BLOCK_BUFFER)
 	{
 		m_rec.active_track_id = 0;
 		m_rec.loop_len = 0;
@@ -117,16 +214,9 @@ public:
 		m_read_write_phase = READ_AHEAD_PHASE;
 		m_blocks_to_transfer = READ_BATCH;
 		m_cycle_status = CYCLE_CLEAN_PASS;
-		m_cur_track_id = 0;
-		m_cur_block_no = 0;
-		m_read_ahead_track_id = 0;
-		m_read_ahead_block_no = 0;
-		m_write_behind_track_id = 1;
-		m_write_behind_block_no = 0;
-		m_is_read_ahead = 0;
-		m_is_overdub = 0;
-		m_loop_overflow_flag = 0;
-		m_loop_cycle_flag = 0;
+		m_cur_track_id = INIT_REC_TRACK_ID;
+		reset_playback(0);
+
 	}
 
 
@@ -158,49 +248,48 @@ public:
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	void erase_recording() {
+		reset_playback(0);
 		m_rec.loop_len = 0;
-	}
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void clear_sd_buffers() {
-		m_rec_buf.clear();
-		m_play_buf.clear();
-		g_sd_card.read_block_ready(NULL);
-
-	}
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void stop_or_reset_playback(int read_ahead) {
-		clear_sd_buffers();
-
-		m_cur_block_no = 0;
-		m_read_ahead_block_no = 0;
-		m_write_behind_block_no = 0;
-		m_read_ahead_track_id = m_cur_track_id;
-		m_write_behind_track_id = other_track_id(m_cur_track_id);
-
-		m_is_read_ahead = read_ahead;
-		m_is_overdub = 0;
-		m_loop_overflow_flag = 0;
-		m_loop_cycle_flag = 0;
-
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	// prepare for the initial recording of the loop
 	void open_initial_rec() {
-		m_is_read_ahead = 0;
+		reset_playback(0);
+		m_cur_track_id = INIT_REC_TRACK_ID;
+		m_write_behind_track_id = m_cur_track_id;
+		m_read_ahead_track_id = other_track_id(m_cur_track_id);
+		m_rec_mode = REC_INITIAL;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	void close_initial_rec() {
+		m_cur_track_id = INIT_REC_TRACK_ID; // prepare to read from track we just recorded
 		m_rec.loop_len = m_cur_block_no;
-		m_is_read_ahead = 1;
+		reset_playback(1);
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void set_overdub(int overdub) {
-		m_is_overdub = overdub;
+	void punch_in() {
+		m_rec_mode = REC_OVERDUB;
 	}
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	void punch_out() {
+		m_rec_mode = REC_PLAY;
+	}
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	void start_playback() {
+		reset_playback(1);
+		m_rec_mode = REC_PLAY;
+	}
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	void stop_playback() {
+		reset_playback(1);
+	}
+
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	void run() {
@@ -281,7 +370,8 @@ public:
 						++g_stats.block_writes;
 					}
 					// increment the write block location on SD card
-					if(++m_write_behind_block_no >= m_rec.loop_len) {
+					++m_write_behind_block_no;
+					if(m_rec.loop_len && m_write_behind_block_no >= m_rec.loop_len) {
 						// next we'll be writing to the other track
 						m_write_behind_block_no = 0;
 						m_write_behind_track_id = other_track_id(m_write_behind_track_id);
@@ -296,65 +386,47 @@ public:
 		}
 	}
 
+
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	// Advance the play/rec position (corresponds to the sample that is actually being played/overdubbed)
-	void advance_cur_block_no() {
-
-		// has a loop been established?
-		if(m_rec.loop_len) {
-
-			// track the block number corresponding to the position in the loop that
-			// is actually being recorded/played at this moment in time
-			if(++m_cur_block_no >= m_rec.loop_len) {
-
-				// loop has cycled past end and back to start
-				m_loop_cycle_flag = 1;
-
-				// move to other track
-				m_cur_block_no = 0;
-				m_cur_track_id = other_track_id(m_cur_track_id);
-
-				// track two loop cycles without any overdubs.. at this point both tracks
-				// have identical content so no need to do real write behind to SD card as
-				// data has not changed
-				switch(m_cycle_status) {
-				case CYCLE_DIRTY_PASS:
-					m_cycle_status = CYCLE_CLEAN_PASS;
-					break;
-				case CYCLE_CLEAN_PASS:
-					m_cycle_status = CYCLE_ALL_UNCHANGED;
-					break;
-				case CYCLE_ALL_UNCHANGED:
-					// no change
-					break;
-				}
-			}
+	int get_audio(SAMPLE_BLOCK *block) {
+		if(!m_play_buf.pop(&m_cur_block)) {
+			return 0;
 		}
-		// no loop length, so make sure that we don't exceed the allowable loop size
-		else if(m_cur_block_no < TRACK_SIZE_BLOCKS - 1) {
-			++m_cur_block_no;
-		}
-		else {
-			// no more space for loop!
-			m_loop_overflow_flag = 1;
-		}
+		*block = m_cur_block;
+		return 1;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	inline int get_audio(SAMPLE_BLOCK *block) {
-		return m_play_buf.pop(block);
-	}
+	// accept incoming audio
+	int put_audio(SAMPLE_BLOCK *block) {
 
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	inline int put_audio(SAMPLE_BLOCK *block, int is_new) {
-		if(is_new) {
+		switch(m_rec_mode) {
+		case REC_INITIAL:
 			m_cycle_status = CYCLE_DIRTY_PASS;
+			advance_cur_block_no();
+			return m_rec_buf.push(block);
+			break;
+		case REC_OVERDUB:
+			m_cycle_status = CYCLE_DIRTY_PASS;
+			advance_cur_block_no();
+			mix_audio(&m_cur_block, block);
+			return m_rec_buf.push(&m_cur_block);
+			break;
+		case REC_PLAY:
+			advance_cur_block_no();
+			return m_rec_buf.push(&m_cur_block);
+		case REC_STOP:
+			break;
 		}
-		return m_rec_buf.push(block);
+		return 0;
 	}
 
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 class CRecordingTest: public CRecording {
 public:
 	void set_loop_len(int len) {
@@ -363,16 +435,14 @@ public:
 
 	void test1() {
 		// set up two tracks worth of
-		set_loop_len(4);
 		clear_sd_buffers();
-		m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad0);
-		m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad1);
-		m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad2);
-		m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad3);
-		m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad0);
-		m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad1);
-		m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad2);
-		m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad3);
+		for(int i=0; i<15; ++i) {
+			m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad0);
+			m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad1);
+			m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad2);
+			m_rec_buf.push((SAMPLE_BLOCK*)&sine::quad3);
+		}
+		set_loop_len(60);
 	}
 
 

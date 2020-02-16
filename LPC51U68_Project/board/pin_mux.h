@@ -29,6 +29,8 @@ void BOARD_InitBootPins(void);
 #define MCLKIO_DIR_OUTPUT                                                  0x01u   /*!<@brief MCLK direction control.: The MCLK function is an output. */
 #define PIO010_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO010_FUNC_ALT1                                                   0x01u   /*!<@brief Selects pin function.: Alternative connection 1. */
+#define PIO021_DIGIMODE_DIGITAL                                            0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
+#define PIO021_FUNC_ALT0                                                   0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
 #define PIO02_DIGIMODE_DIGITAL                                             0x01u   /*!<@brief Select Analog/Digital mode.: Digital mode. */
 #define PIO02_FUNC_ALT0                                                    0x00u   /*!<@brief Selects pin function.: Alternative connection 0. */
 #define PIO02_MODE_INACTIVE                                                0x00u   /*!<@brief Selects function mode (on-chip pull-up/pull-down resistor control).: Inactive. Inactive (no pull-down/pull-up resistor enabled). */
@@ -116,6 +118,11 @@ void BOARD_InitBootPins(void);
 #define BOARD_INITPINS_UI_LED_SINK_GPIO                                     GPIO   /*!<@brief GPIO device name: GPIO */
 #define BOARD_INITPINS_UI_LED_SINK_PORT                                       0U   /*!<@brief PORT device index: 0 */
 #define BOARD_INITPINS_UI_LED_SINK_PIN                                       30U   /*!<@brief PIO0 GPIO pin index: 30 */
+
+/*! @name PIO0_21 (number 61), REC_LED */
+#define BOARD_INITPINS_REC_LED_GPIO                                         GPIO   /*!<@brief GPIO device name: GPIO */
+#define BOARD_INITPINS_REC_LED_PORT                                           0U   /*!<@brief PORT device index: 0 */
+#define BOARD_INITPINS_REC_LED_PIN                                           21U   /*!<@brief PIO0 GPIO pin index: 21 */
 
 /*!
  * @brief Configures pin routing and optionally pin electrical features.

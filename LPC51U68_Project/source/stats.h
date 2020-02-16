@@ -17,6 +17,9 @@ struct {
 	int dummy_writes;
 	int audio_out;
 	int audio_in;
+	int loop_cycles;
+	int sd_setup_error;
+	int sd_access_errors;
 } g_stats;
 
 
