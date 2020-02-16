@@ -21,6 +21,12 @@ __DATA(SRAM0) SAMPLE_BLOCK g_write_buffer[SZ_BLOCK_BUFFER]; // the big buffer fo
 
 class CRecording {
 friend class CLooperTest;
+public:
+	typedef enum {
+		REC_NONE,
+		REC_PLAY,
+		REC_NEW
+	} REC_MODE;
 protected:
 	// various constants
 	enum {
@@ -55,9 +61,6 @@ protected:
 	// This is a look up of track layout info
 	TRACK_INFO m_track[NUM_TRACKS];
 
-	// the last block to be output
-	SAMPLE_BLOCK m_cur_block;
-
 	CBlockBuffer m_rec_buf;
 	CBlockBuffer m_play_buf;
 
@@ -80,13 +83,6 @@ protected:
 		CYCLE_ALL_UNCHANGED
 	} m_cycle_status;
 
-	enum {
-		REC_STOP,
-		REC_PLAY,
-		REC_INITIAL,
-		REC_OVERDUB
-	} m_rec_mode;
-
 	int m_cur_track_id;
 	int m_cur_block_no;
 
@@ -99,26 +95,9 @@ protected:
 	int m_write_behind_block_no;
 
 	int m_is_read_ahead; 		// are we reading ahead (not needed during initial recording)
-	//int m_is_overdub;		// are we overdubbing?
 
 	int m_loop_overflow_flag;	// flag records if loop overflowed allowed space during initial recording
 	int m_loop_cycle_flag;		// flag records if loop cycled from end to start during playback/overdub
-
-
-
-	////////////////////////////////////////////////////////////////////
-	void mix_audio(SAMPLE_BLOCK *block, SAMPLE_BLOCK *overdub) {
-		for(int i=0; i<	SZ_SAMPLE_BLOCK; ++i) {
-			int res = block->data[i] + overdub->data[i];
-			if(res < MIN_SAMPLE_VALUE) {
-				res = MIN_SAMPLE_VALUE;
-			}
-			else if(res > MAX_SAMPLE_VALUE) {
-				res = MAX_SAMPLE_VALUE;
-			}
-			block->data[i] = res;
-		}
-	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Helper function for toggling the active record and playback tracks while leaving any other
@@ -129,20 +108,17 @@ protected:
 
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void reset_playback(int read_ahead) {
-		clear_sd_buffers();
-
+	void reset_to_start() {
 		m_cur_block_no = 0;
 		m_read_ahead_block_no = 0;
 		m_write_behind_block_no = 0;
 		m_read_ahead_track_id = m_cur_track_id;
 		m_write_behind_track_id = other_track_id(m_cur_track_id);
 
-		m_is_read_ahead = read_ahead;
-		m_rec_mode = REC_STOP;
 		m_loop_overflow_flag = 0;
 		m_loop_cycle_flag = 0;
 
+		clear_sd_buffers();
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -215,13 +191,14 @@ public:
 		m_blocks_to_transfer = READ_BATCH;
 		m_cycle_status = CYCLE_CLEAN_PASS;
 		m_cur_track_id = INIT_REC_TRACK_ID;
-		reset_playback(0);
+		m_is_read_ahead = 0;
+		reset_to_start();
 
 	}
 
 
 	void init() {
-		clear_sd_buffers();
+
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -247,47 +224,56 @@ public:
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	// called to fetch the next block of audio to be played
+	int get_audio(SAMPLE_BLOCK *block) {
+		return m_play_buf.pop(block);
+	}
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+	// called when we receive a block of audio.
+	int put_audio(SAMPLE_BLOCK *block, REC_MODE mode) {
+		switch(mode) {
+		case REC_NEW:
+			m_cycle_status = CYCLE_DIRTY_PASS;
+			// fall thru
+		case REC_PLAY:
+			advance_cur_block_no();
+			return m_rec_buf.push(block);
+		case REC_NONE:
+			break;
+		}
+		return 0;
+	}
+
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	void erase_recording() {
-		reset_playback(0);
 		m_rec.loop_len = 0;
+		m_is_read_ahead = 0;
+		reset_to_start();
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	// prepare for the initial recording of the loop
 	void open_initial_rec() {
-		reset_playback(0);
+		reset_to_start();
+		m_is_read_ahead = 0;
 		m_cur_track_id = INIT_REC_TRACK_ID;
 		m_write_behind_track_id = m_cur_track_id;
 		m_read_ahead_track_id = other_track_id(m_cur_track_id);
-		m_rec_mode = REC_INITIAL;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
 	void close_initial_rec() {
 		m_cur_track_id = INIT_REC_TRACK_ID; // prepare to read from track we just recorded
 		m_rec.loop_len = m_cur_block_no;
-		reset_playback(1);
+		m_is_read_ahead = 1;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void punch_in() {
-		m_rec_mode = REC_OVERDUB;
-	}
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void punch_out() {
-		m_rec_mode = REC_PLAY;
-	}
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void start_playback() {
-		reset_playback(1);
-		m_rec_mode = REC_PLAY;
-	}
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	void stop_playback() {
-		reset_playback(1);
+	void reset_playback() {
+		m_is_read_ahead = 1;
+		reset_to_start();
 	}
 
 
@@ -322,10 +308,6 @@ public:
 
 		// when SD card is ready, check for the next action to do. We toggle between "phases" of read
 		// ahead and write behind so that SD access can be optimised for multiple block operations
-
-
-
-
 		if(g_sd_card.is_ready()) {
 
 			switch(m_read_write_phase) {
@@ -384,41 +366,6 @@ public:
 				g_sd_card.request_read_block(block_no);
 			}
 		}
-	}
-
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	int get_audio(SAMPLE_BLOCK *block) {
-		if(!m_play_buf.pop(&m_cur_block)) {
-			return 0;
-		}
-		*block = m_cur_block;
-		return 1;
-	}
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////
-	// accept incoming audio
-	int put_audio(SAMPLE_BLOCK *block) {
-
-		switch(m_rec_mode) {
-		case REC_INITIAL:
-			m_cycle_status = CYCLE_DIRTY_PASS;
-			advance_cur_block_no();
-			return m_rec_buf.push(block);
-			break;
-		case REC_OVERDUB:
-			m_cycle_status = CYCLE_DIRTY_PASS;
-			advance_cur_block_no();
-			mix_audio(&m_cur_block, block);
-			return m_rec_buf.push(&m_cur_block);
-			break;
-		case REC_PLAY:
-			advance_cur_block_no();
-			return m_rec_buf.push(&m_cur_block);
-		case REC_STOP:
-			break;
-		}
-		return 0;
 	}
 
 };

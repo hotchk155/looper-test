@@ -497,7 +497,7 @@ public:
 		////////////////////////////////////////////////////////////////////////////////////
 		// START A NEW MULTI BLOCK WRITE
 		case ST_WRITE_CMD:
-			PRINTF("write %d\r\n",m_req_block_no);
+			//PRINTF("write %d\r\n",m_req_block_no);
 
 			g_ui.set_rec(1);
 			LOG2("ST_WRITE_CMD %d\r\n", m_req_block_no);
