@@ -60,23 +60,19 @@ public:
 		}
 	}
 	void tick_isr() {
-		switch(m_scan_state) {
-		case 0:
+		if(!m_scan_state) {
 			GPIO_PinWrite(BOARD_INITPINS_UI_LED_SINK_GPIO, BOARD_INITPINS_UI_LED_SINK_PORT, BOARD_INITPINS_UI_LED_SINK_PIN, 1);
 			GPIO_PinWrite(BOARD_INITPINS_UI_0_IO_GPIO, BOARD_INITPINS_UI_0_IO_PORT, BOARD_INITPINS_UI_0_IO_PIN, (m_scan_chan==0));
 			GPIO_PinWrite(BOARD_INITPINS_UI_1_IO_GPIO, BOARD_INITPINS_UI_1_IO_PORT, BOARD_INITPINS_UI_1_IO_PIN, (m_scan_chan==1));
 			GPIO_PinWrite(BOARD_INITPINS_UI_2_IO_GPIO, BOARD_INITPINS_UI_2_IO_PORT, BOARD_INITPINS_UI_2_IO_PIN, (m_scan_chan==2));
-			++m_scan_state;
-			break;
-		case 1:
+			GPIO_PinWrite(BOARD_INITPINS_UI_LED_SINK_GPIO, BOARD_INITPINS_UI_LED_SINK_PORT, BOARD_INITPINS_UI_LED_SINK_PIN, !(m_led[m_scan_chan] & m_cycle));
+		}
+
+		if(++m_scan_state >= 2) {
+			m_scan_state = 0;
 			if(GPIO_PinRead(BOARD_INITPINS_UI_SW_READ_GPIO, BOARD_INITPINS_UI_SW_READ_PORT, BOARD_INITPINS_UI_SW_READ_PIN)) {
 				m_key_scan |= (1<<m_scan_chan);
 			}
-			GPIO_PinWrite(BOARD_INITPINS_UI_LED_SINK_GPIO, BOARD_INITPINS_UI_LED_SINK_PORT, BOARD_INITPINS_UI_LED_SINK_PIN, !(m_led[m_scan_chan] & m_cycle));
-			++m_scan_state;
-			break;
-		case 2:
-			// if the LED should come on, pull the LED sink low
 			if(++m_scan_chan>2) {
 				m_scan_chan = 0;
 				m_keys = m_key_scan;
@@ -86,8 +82,6 @@ public:
 			if(m_debounce) {
 				--m_debounce;
 			}
-			m_scan_state = 0;
-			break;
 		}
 	}
 };
